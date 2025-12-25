@@ -1,11 +1,14 @@
 "use client"
 
 import { useEffect, useRef, useCallback } from "react"
-import type { Map } from "mapbox-gl"
+import type { Map, MapMouseEvent } from "mapbox-gl"
 import MapboxDraw from "@mapbox/mapbox-gl-draw"
 import * as turf from "@turf/turf"
 import { useToolStore, type ToolType } from "@/stores/tool-store"
-import { useDesignStore, type DesignFeature, type ElementType } from "@/stores/design-store"
+import { useDesignStore, type DesignFeature, type ElementType, ELEMENT_PRICES } from "@/stores/design-store"
+
+// Tools that use click-to-place instead of draw mode
+const clickToPlaceTools: ToolType[] = ["transition-box", "stormwater-box", "downspout"]
 
 // Custom styles for different element types
 const drawStyles = [
@@ -87,22 +90,23 @@ const drawStyles = [
 ]
 
 // Map tool types to draw modes and geometry types
+// Click-to-place tools use simple_select and handle clicks separately
 const toolConfig: Record<
   ToolType,
-  { mode: string; geometryType: "line" | "point" | "polygon" | null }
+  { mode: string; geometryType: "line" | "point" | "polygon" | null; clickToPlace?: boolean }
 > = {
   select: { mode: "simple_select", geometryType: null },
   "hydroblox-run": { mode: "draw_line_string", geometryType: "line" },
   "parallel-row": { mode: "draw_line_string", geometryType: "line" },
-  "transition-box": { mode: "draw_point", geometryType: "point" },
-  "stormwater-box": { mode: "draw_point", geometryType: "point" },
+  "transition-box": { mode: "simple_select", geometryType: "point", clickToPlace: true },
+  "stormwater-box": { mode: "simple_select", geometryType: "point", clickToPlace: true },
   "flow-arrow": { mode: "draw_line_string", geometryType: "line" },
   "standing-water": { mode: "draw_polygon", geometryType: "polygon" },
   "problem-area": { mode: "draw_polygon", geometryType: "polygon" },
   "existing-swale": { mode: "draw_line_string", geometryType: "line" },
   "existing-french-drain": { mode: "draw_line_string", geometryType: "line" },
   "existing-pipe": { mode: "draw_line_string", geometryType: "line" },
-  downspout: { mode: "draw_point", geometryType: "point" },
+  downspout: { mode: "simple_select", geometryType: "point", clickToPlace: true },
 }
 
 export function useDraw(map: Map | null) {
@@ -232,6 +236,127 @@ export function useDraw(map: Map | null) {
       }
     }
   }, [activeTool])
+
+  // Handle click-to-place for boxes
+  useEffect(() => {
+    if (!map) return
+
+    const handleMapClick = (e: MapMouseEvent) => {
+      const currentTool = useToolStore.getState().activeTool
+
+      // Only handle click-to-place tools
+      if (!clickToPlaceTools.includes(currentTool)) return
+
+      const elementType = currentTool as ElementType
+      const price = ELEMENT_PRICES[elementType] || 0
+      const id = `${elementType}-${Date.now()}`
+
+      const designFeature: DesignFeature = {
+        type: "Feature",
+        id,
+        geometry: {
+          type: "Point",
+          coordinates: [e.lngLat.lng, e.lngLat.lat],
+        },
+        properties: {
+          elementType,
+          price,
+        },
+      }
+
+      addFeature(designFeature)
+
+      // Switch back to select after placing
+      setActiveTool("select")
+    }
+
+    map.on("click", handleMapClick)
+
+    return () => {
+      map.off("click", handleMapClick)
+    }
+  }, [map, addFeature, setActiveTool])
+
+  // Set up custom layers for rendering boxes from design store
+  useEffect(() => {
+    if (!map) return
+
+    // Add source for design features
+    if (!map.getSource("design-boxes")) {
+      map.addSource("design-boxes", {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: [],
+        },
+      })
+
+      // Layer for transition boxes (squares)
+      map.addLayer({
+        id: "transition-boxes",
+        type: "circle",
+        source: "design-boxes",
+        filter: ["==", ["get", "elementType"], "transition-box"],
+        paint: {
+          "circle-radius": 12,
+          "circle-color": "#2563eb",
+          "circle-stroke-width": 3,
+          "circle-stroke-color": "#ffffff",
+        },
+      })
+
+      // Layer for stormwater boxes (larger circles)
+      map.addLayer({
+        id: "stormwater-boxes",
+        type: "circle",
+        source: "design-boxes",
+        filter: ["==", ["get", "elementType"], "stormwater-box"],
+        paint: {
+          "circle-radius": 18,
+          "circle-color": "#2563eb",
+          "circle-stroke-width": 3,
+          "circle-stroke-color": "#ffffff",
+        },
+      })
+
+      // Layer for downspouts (small circles)
+      map.addLayer({
+        id: "downspouts",
+        type: "circle",
+        source: "design-boxes",
+        filter: ["==", ["get", "elementType"], "downspout"],
+        paint: {
+          "circle-radius": 8,
+          "circle-color": "#10b981",
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#ffffff",
+        },
+      })
+    }
+
+    // Subscribe to design store changes
+    const unsubscribe = useDesignStore.subscribe((state) => {
+      const source = map.getSource("design-boxes")
+      if (source && "setData" in source) {
+        const pointFeatures = state.features.filter(
+          (f) => f.geometry.type === "Point"
+        )
+        source.setData({
+          type: "FeatureCollection",
+          features: pointFeatures,
+        })
+      }
+    })
+
+    return () => {
+      unsubscribe()
+      // Clean up layers and source
+      if (map.getLayer("transition-boxes")) map.removeLayer("transition-boxes")
+      if (map.getLayer("stormwater-boxes")) map.removeLayer("stormwater-boxes")
+      if (map.getLayer("downspouts")) map.removeLayer("downspouts")
+      if (map.getSource("design-boxes")) map.removeSource("design-boxes")
+    }
+  }, [map])
 
   // Delete selected features
   const deleteSelected = useCallback(() => {

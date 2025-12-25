@@ -14,12 +14,19 @@ export type ElementType =
   | "existing-pipe"
   | "downspout"
 
+// Pricing for elements
+export const ELEMENT_PRICES: Partial<Record<ElementType, number>> = {
+  "transition-box": 400,
+  "stormwater-box": 750,
+}
+
 export interface DesignFeature extends Feature<LineString | Point | Polygon> {
   id: string | number
   properties: {
     elementType: ElementType
     lengthFt?: number
     areaFt?: number
+    price?: number
     label?: string
   }
 }
@@ -31,7 +38,9 @@ interface DesignStore {
   removeFeature: (id: string) => void
   clearFeatures: () => void
   getTotalLF: () => number
+  getTotalCost: () => number
   getFeaturesByType: (type: ElementType) => DesignFeature[]
+  getCountByType: (type: ElementType) => number
 }
 
 export const useDesignStore = create<DesignStore>((set, get) => ({
@@ -67,5 +76,20 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   getFeaturesByType: (type) => {
     const { features } = get()
     return features.filter((f) => f.properties.elementType === type)
+  },
+
+  getCountByType: (type) => {
+    const { features } = get()
+    return features.filter((f) => f.properties.elementType === type).length
+  },
+
+  getTotalCost: () => {
+    const { features } = get()
+    return features.reduce((total, f) => {
+      if (f.properties.price) {
+        return total + f.properties.price
+      }
+      return total
+    }, 0)
   },
 }))
