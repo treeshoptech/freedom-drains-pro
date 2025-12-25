@@ -20,6 +20,8 @@ export const ELEMENT_PRICES: Partial<Record<ElementType, number>> = {
   "stormwater-box": 750,
 }
 
+export type FeatureStatus = "working" | "failed"
+
 export interface DesignFeature extends Feature<LineString | Point | Polygon> {
   id: string | number
   properties: {
@@ -28,6 +30,7 @@ export interface DesignFeature extends Feature<LineString | Point | Polygon> {
     areaFt?: number
     price?: number
     label?: string
+    status?: FeatureStatus
   }
 }
 
@@ -37,6 +40,7 @@ interface DesignStore {
   updateFeature: (id: string, feature: DesignFeature) => void
   removeFeature: (id: string) => void
   clearFeatures: () => void
+  toggleFailedStatus: (id: string) => void
   getTotalLF: () => number
   getTotalCost: () => number
   getFeaturesByType: (type: ElementType) => DesignFeature[]
@@ -62,6 +66,22 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     })),
 
   clearFeatures: () => set({ features: [] }),
+
+  toggleFailedStatus: (id) =>
+    set((state) => ({
+      features: state.features.map((f) => {
+        if (String(f.id) === id) {
+          return {
+            ...f,
+            properties: {
+              ...f.properties,
+              status: f.properties.status === "failed" ? "working" : "failed",
+            },
+          }
+        }
+        return f
+      }),
+    })),
 
   getTotalLF: () => {
     const { features } = get()

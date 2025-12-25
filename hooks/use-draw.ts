@@ -109,10 +109,18 @@ const toolConfig: Record<
   downspout: { mode: "simple_select", geometryType: "point", clickToPlace: true },
 }
 
+// Existing feature types that support failed status
+const existingFeatureTypes: ElementType[] = [
+  "existing-swale",
+  "existing-french-drain",
+  "existing-pipe",
+  "downspout",
+]
+
 export function useDraw(map: Map | null) {
   const drawRef = useRef<MapboxDraw | null>(null)
   const { activeTool, setActiveTool } = useToolStore()
-  const { addFeature, updateFeature, removeFeature } = useDesignStore()
+  const { addFeature, updateFeature, removeFeature, toggleFailedStatus } = useDesignStore()
 
   // Calculate length in feet for LineString
   const calculateLengthFt = useCallback((feature: GeoJSON.Feature): number => {
@@ -149,6 +157,9 @@ export function useDraw(map: Map | null) {
       const currentTool = useToolStore.getState().activeTool
       const elementType = currentTool as ElementType
 
+      // Set initial status for existing feature types
+      const isExistingType = existingFeatureTypes.includes(elementType)
+
       const designFeature: DesignFeature = {
         ...feature,
         properties: {
@@ -161,6 +172,7 @@ export function useDraw(map: Map | null) {
             feature.geometry.type === "Polygon"
               ? calculateAreaFt(feature)
               : undefined,
+          status: isExistingType ? "working" : undefined,
         },
       } as DesignFeature
 
@@ -237,7 +249,7 @@ export function useDraw(map: Map | null) {
     }
   }, [activeTool])
 
-  // Handle click-to-place for boxes
+  // Handle click-to-place for boxes and downspouts
   useEffect(() => {
     if (!map) return
 
@@ -251,6 +263,9 @@ export function useDraw(map: Map | null) {
       const price = ELEMENT_PRICES[elementType] || 0
       const id = `${elementType}-${Date.now()}`
 
+      // Set initial status for existing feature types (downspout)
+      const isExistingType = existingFeatureTypes.includes(elementType)
+
       const designFeature: DesignFeature = {
         type: "Feature",
         id,
@@ -260,7 +275,8 @@ export function useDraw(map: Map | null) {
         },
         properties: {
           elementType,
-          price,
+          price: price || undefined,
+          status: isExistingType ? "working" : undefined,
         },
       }
 
@@ -277,13 +293,13 @@ export function useDraw(map: Map | null) {
     }
   }, [map, addFeature, setActiveTool])
 
-  // Set up custom layers for rendering boxes from design store
+  // Set up custom layers for rendering features from design store
   useEffect(() => {
     if (!map) return
 
-    // Add source for design features
-    if (!map.getSource("design-boxes")) {
-      map.addSource("design-boxes", {
+    // Add source for point features (boxes, downspouts)
+    if (!map.getSource("design-points")) {
+      map.addSource("design-points", {
         type: "geojson",
         data: {
           type: "FeatureCollection",
@@ -295,7 +311,7 @@ export function useDraw(map: Map | null) {
       map.addLayer({
         id: "transition-boxes",
         type: "circle",
-        source: "design-boxes",
+        source: "design-points",
         filter: ["==", ["get", "elementType"], "transition-box"],
         paint: {
           "circle-radius": 12,
@@ -309,7 +325,7 @@ export function useDraw(map: Map | null) {
       map.addLayer({
         id: "stormwater-boxes",
         type: "circle",
-        source: "design-boxes",
+        source: "design-points",
         filter: ["==", ["get", "elementType"], "stormwater-box"],
         paint: {
           "circle-radius": 18,
@@ -319,44 +335,173 @@ export function useDraw(map: Map | null) {
         },
       })
 
-      // Layer for downspouts (small circles)
+      // Layer for downspouts (gray circles)
       map.addLayer({
         id: "downspouts",
         type: "circle",
-        source: "design-boxes",
+        source: "design-points",
         filter: ["==", ["get", "elementType"], "downspout"],
         paint: {
-          "circle-radius": 8,
-          "circle-color": "#10b981",
+          "circle-radius": 10,
+          "circle-color": [
+            "case",
+            ["==", ["get", "status"], "failed"],
+            "#ef4444",
+            "#6b7280",
+          ],
           "circle-stroke-width": 2,
           "circle-stroke-color": "#ffffff",
         },
       })
     }
 
+    // Add source for line features (existing drainage)
+    if (!map.getSource("design-lines")) {
+      map.addSource("design-lines", {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: [],
+        },
+      })
+
+      // Layer for existing swales (dashed gray/red line)
+      map.addLayer({
+        id: "existing-swales",
+        type: "line",
+        source: "design-lines",
+        filter: ["==", ["get", "elementType"], "existing-swale"],
+        paint: {
+          "line-color": [
+            "case",
+            ["==", ["get", "status"], "failed"],
+            "#ef4444",
+            "#6b7280",
+          ],
+          "line-width": 3,
+          "line-dasharray": [4, 4],
+        },
+      })
+
+      // Layer for existing french drains (dotted gray/red line)
+      map.addLayer({
+        id: "existing-french-drains",
+        type: "line",
+        source: "design-lines",
+        filter: ["==", ["get", "elementType"], "existing-french-drain"],
+        paint: {
+          "line-color": [
+            "case",
+            ["==", ["get", "status"], "failed"],
+            "#ef4444",
+            "#6b7280",
+          ],
+          "line-width": 3,
+          "line-dasharray": [2, 2],
+        },
+      })
+
+      // Layer for existing pipes (solid gray/red line)
+      map.addLayer({
+        id: "existing-pipes",
+        type: "line",
+        source: "design-lines",
+        filter: ["==", ["get", "elementType"], "existing-pipe"],
+        paint: {
+          "line-color": [
+            "case",
+            ["==", ["get", "status"], "failed"],
+            "#ef4444",
+            "#6b7280",
+          ],
+          "line-width": 3,
+        },
+      })
+    }
+
     // Subscribe to design store changes
     const unsubscribe = useDesignStore.subscribe((state) => {
-      const source = map.getSource("design-boxes")
-      if (source && "setData" in source) {
-        const pointFeatures = state.features.filter(
-          (f) => f.geometry.type === "Point"
-        )
-        source.setData({
+      // Update point features (include id in properties for click detection)
+      const pointSource = map.getSource("design-points")
+      if (pointSource && "setData" in pointSource) {
+        const pointFeatures = state.features
+          .filter((f) => f.geometry.type === "Point")
+          .map((f) => ({
+            ...f,
+            properties: { ...f.properties, id: f.id },
+          }))
+        pointSource.setData({
           type: "FeatureCollection",
           features: pointFeatures,
+        })
+      }
+
+      // Update line features (only existing drainage types, include id in properties)
+      const lineSource = map.getSource("design-lines")
+      if (lineSource && "setData" in lineSource) {
+        const existingTypes = ["existing-swale", "existing-french-drain", "existing-pipe"]
+        const lineFeatures = state.features
+          .filter(
+            (f) =>
+              f.geometry.type === "LineString" &&
+              existingTypes.includes(f.properties.elementType)
+          )
+          .map((f) => ({
+            ...f,
+            properties: { ...f.properties, id: f.id },
+          }))
+        lineSource.setData({
+          type: "FeatureCollection",
+          features: lineFeatures,
         })
       }
     })
 
     return () => {
       unsubscribe()
-      // Clean up layers and source
+      // Clean up layers and sources
       if (map.getLayer("transition-boxes")) map.removeLayer("transition-boxes")
       if (map.getLayer("stormwater-boxes")) map.removeLayer("stormwater-boxes")
       if (map.getLayer("downspouts")) map.removeLayer("downspouts")
-      if (map.getSource("design-boxes")) map.removeSource("design-boxes")
+      if (map.getLayer("existing-swales")) map.removeLayer("existing-swales")
+      if (map.getLayer("existing-french-drains")) map.removeLayer("existing-french-drains")
+      if (map.getLayer("existing-pipes")) map.removeLayer("existing-pipes")
+      if (map.getSource("design-points")) map.removeSource("design-points")
+      if (map.getSource("design-lines")) map.removeSource("design-lines")
     }
   }, [map])
+
+  // Handle right-click to toggle failed status on existing features
+  useEffect(() => {
+    if (!map) return
+
+    const handleContextMenu = (e: MapMouseEvent) => {
+      e.preventDefault()
+
+      // Check if clicked on an existing feature layer
+      const layers = [
+        "existing-swales",
+        "existing-french-drains",
+        "existing-pipes",
+        "downspouts",
+      ]
+
+      const features = map.queryRenderedFeatures(e.point, { layers })
+      if (features.length > 0) {
+        const feature = features[0]
+        const id = feature.properties?.id || feature.id
+        if (id) {
+          toggleFailedStatus(String(id))
+        }
+      }
+    }
+
+    map.on("contextmenu", handleContextMenu)
+
+    return () => {
+      map.off("contextmenu", handleContextMenu)
+    }
+  }, [map, toggleFailedStatus])
 
   // Delete selected features
   const deleteSelected = useCallback(() => {
@@ -378,9 +523,18 @@ export function useDraw(map: Map | null) {
     return drawRef.current?.getAll() || { type: "FeatureCollection", features: [] }
   }, [])
 
+  // Toggle failed status for a specific feature
+  const toggleFailed = useCallback(
+    (id: string) => {
+      toggleFailedStatus(id)
+    },
+    [toggleFailedStatus]
+  )
+
   return {
     draw: drawRef.current,
     deleteSelected,
     getAll,
+    toggleFailed,
   }
 }
