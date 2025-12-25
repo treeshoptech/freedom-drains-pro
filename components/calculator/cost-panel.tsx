@@ -117,12 +117,9 @@ export function CostPanel() {
 
           <div className={css({ px: "4", py: "4" })}>
             {/* Promo Badge */}
-            {pricing.isPromo && (
+            {pricing.isPromo && pricing.savings > 0 && (
               <div
                 className={css({
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "2",
                   bg: "green.50",
                   color: "green.700",
                   px: "3",
@@ -133,8 +130,19 @@ export function CostPanel() {
                   mb: "3",
                 })}
               >
-                <span>⚡</span>
-                <span>Q1 2026 Promo - Save ${pricing.savings.toLocaleString()}!</span>
+                <div className={css({ display: "flex", alignItems: "center", gap: "2" })}>
+                  <span>⚡</span>
+                  <span>Promo Pricing - Save ${pricing.savings.toLocaleString()}!</span>
+                </div>
+                <div
+                  className={css({
+                    fontSize: "xs",
+                    color: "green.600",
+                    mt: "1",
+                  })}
+                >
+                  Ends March 31, 2026
+                </div>
               </div>
             )}
 

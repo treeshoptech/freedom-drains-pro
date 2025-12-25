@@ -1,32 +1,32 @@
 import type { DesignFeature } from "@/stores/design-store"
 
-// Pricing rates
-export const RATES = {
-  hydroblox: 45, // per linear foot
-  parallel: 35, // per linear foot
+// Promo end date: March 31, 2026
+const PROMO_END = new Date("2026-03-31T23:59:59")
+
+export interface PricingRates {
+  hydroblox: number
+  parallel: number
+  transitionBox: number
+  stormwaterBox: number
+}
+
+// Regular pricing rates (from treeshop.app/store)
+export const REGULAR_RATES: PricingRates = {
+  hydroblox: 50, // per linear foot
+  parallel: 25, // per linear foot
   transitionBox: 400, // per unit
   stormwaterBox: 750, // per unit
 }
 
-// Q1 2026 promo pricing
-export const PROMO_RATES = {
-  hydroblox: 40,
-  parallel: 30,
-  transitionBox: 350,
-  stormwaterBox: 650,
+// Promo pricing (HydroBlox only)
+export const PROMO_RATES: PricingRates = {
+  hydroblox: 35, // $15 savings per LF
+  parallel: 25, // no change
+  transitionBox: 400, // no change
+  stormwaterBox: 750, // no change
 }
 
-// Check if promo is active (Q1 2026)
-export function isPromoActive(): boolean {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth() + 1 // 0-indexed
-
-  // Q1 2026: January - March 2026
-  return year === 2026 && month >= 1 && month <= 3
-}
-
-export interface PricingResult {
+export interface PricingSummary {
   // Linear feet totals
   hydrobloxLF: number
   parallelLF: number
@@ -47,56 +47,61 @@ export interface PricingResult {
 
   // Promo info
   isPromo: boolean
+  regularTotal: number
   savings: number
 
   // Rates used
-  rates: typeof RATES
+  rates: PricingRates
 }
 
-export function calculateTotal(features: DesignFeature[]): PricingResult {
-  const isPromo = isPromoActive()
-  const rates = isPromo ? PROMO_RATES : RATES
+export function calculateTotal(features: DesignFeature[]): PricingSummary {
+  const now = new Date()
+  const isPromo = now < PROMO_END
 
-  // Calculate linear feet
-  const hydrobloxLF = features
-    .filter((f) => f.properties.elementType === "hydroblox-run")
-    .reduce((sum, f) => sum + (f.properties.lengthFt || 0), 0)
+  const rates: PricingRates = isPromo ? PROMO_RATES : REGULAR_RATES
 
-  const parallelLF = features
-    .filter((f) => f.properties.elementType === "parallel-row")
-    .reduce((sum, f) => sum + (f.properties.lengthFt || 0), 0)
+  // Sum up line lengths by type
+  let hydrobloxLF = 0
+  let parallelLF = 0
+  let transitionCount = 0
+  let stormwaterCount = 0
 
-  // Count units
-  const transitionCount = features.filter(
-    (f) => f.properties.elementType === "transition-box"
-  ).length
+  for (const feature of features) {
+    const type = feature.properties?.elementType
 
-  const stormwaterCount = features.filter(
-    (f) => f.properties.elementType === "stormwater-box"
-  ).length
+    if (type === "hydroblox-run") {
+      hydrobloxLF += feature.properties?.lengthFt || 0
+    }
+    if (type === "parallel-row") {
+      parallelLF += feature.properties?.lengthFt || 0
+    }
+    if (type === "transition-box") {
+      transitionCount++
+    }
+    if (type === "stormwater-box") {
+      stormwaterCount++
+    }
+  }
 
   // Calculate costs
-  const hydrobloxCost = hydrobloxLF * rates.hydroblox
-  const parallelCost = parallelLF * rates.parallel
+  const hydrobloxCost = Math.round(hydrobloxLF * rates.hydroblox)
+  const parallelCost = Math.round(parallelLF * rates.parallel)
   const transitionCost = transitionCount * rates.transitionBox
   const stormwaterCost = stormwaterCount * rates.stormwaterBox
 
   const total = hydrobloxCost + parallelCost + transitionCost + stormwaterCost
 
-  // Calculate savings if promo
-  let savings = 0
-  if (isPromo) {
-    const regularTotal =
-      hydrobloxLF * RATES.hydroblox +
-      parallelLF * RATES.parallel +
-      transitionCount * RATES.transitionBox +
-      stormwaterCount * RATES.stormwaterBox
-    savings = regularTotal - total
-  }
+  // Calculate regular total (for savings display)
+  const regularHydroblox = Math.round(hydrobloxLF * REGULAR_RATES.hydroblox)
+  const regularTotal =
+    regularHydroblox + parallelCost + transitionCost + stormwaterCost
+
+  // Savings only applies during promo
+  const savings = isPromo ? regularTotal - total : 0
 
   return {
-    hydrobloxLF,
-    parallelLF,
+    hydrobloxLF: Math.round(hydrobloxLF),
+    parallelLF: Math.round(parallelLF),
     transitionCount,
     stormwaterCount,
     hydrobloxCost,
@@ -106,6 +111,7 @@ export function calculateTotal(features: DesignFeature[]): PricingResult {
     subtotal: total,
     total,
     isPromo,
+    regularTotal,
     savings,
     rates,
   }
