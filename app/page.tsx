@@ -575,29 +575,14 @@ export default function HomePage() {
 function NewProjectModal({ onClose }: { onClose: () => void }) {
   const router = useRouter()
   const [address, setAddress] = useState("")
-  const [selectedLocation, setSelectedLocation] = useState<{
-    address: string
-    lat: number
-    lng: number
-  } | null>(null)
   const [isCreating, setIsCreating] = useState(false)
 
-  // Debug: log when selectedLocation changes
-  useEffect(() => {
-    console.log("selectedLocation changed:", selectedLocation)
-  }, [selectedLocation])
-
   const handleCreate = () => {
-    console.log("handleCreate called, selectedLocation:", selectedLocation)
-    if (!selectedLocation) {
-      console.log("No selectedLocation, returning early")
-      return
-    }
+    if (!address.trim()) return
 
     setIsCreating(true)
-    const url = `/projects/new?address=${encodeURIComponent(selectedLocation.address)}&lat=${selectedLocation.lat}&lng=${selectedLocation.lng}`
-    console.log("Navigating to:", url)
-    router.push(url)
+    // Just pass the address - user will position the map themselves
+    router.push(`/projects/new?address=${encodeURIComponent(address)}`)
   }
 
   return (
@@ -684,30 +669,10 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
           <AddressSearch
             value={address}
             onChange={setAddress}
-            onSelect={setSelectedLocation}
+            onSelect={(result) => setAddress(result.address)}
             placeholder="Start typing an address..."
             autoFocus
           />
-
-          {selectedLocation && (
-            <div
-              className={css({
-                mt: "4",
-                p: "3",
-                bg: "rgba(22, 163, 74, 0.1)",
-                borderRadius: "lg",
-                border: "1px solid",
-                borderColor: "rgba(22, 163, 74, 0.3)",
-              })}
-            >
-              <div className={css({ fontSize: "sm", fontWeight: "medium", color: "#16a34a" })}>
-                Location selected
-              </div>
-              <div className={css({ fontSize: "xs", color: "#22c55e", mt: "1" })}>
-                {selectedLocation.address}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Footer */}
@@ -742,7 +707,7 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
           </button>
           <button
             onClick={handleCreate}
-            disabled={!selectedLocation || isCreating}
+            disabled={!address.trim() || isCreating}
             className={css({
               flex: 1,
               display: "flex",
