@@ -577,12 +577,27 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
   const [address, setAddress] = useState("")
   const [isCreating, setIsCreating] = useState(false)
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!address.trim()) return
 
     setIsCreating(true)
-    // Just pass the address - user will position the map themselves
-    router.push(`/projects/new?address=${encodeURIComponent(address)}`)
+
+    // Geocode the address to get starting coordinates
+    try {
+      const res = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`)
+      const data = await res.json()
+
+      if (data.features && data.features[0]) {
+        const [lng, lat] = data.features[0].center
+        router.push(`/projects/new?address=${encodeURIComponent(address)}&lat=${lat}&lng=${lng}`)
+      } else {
+        // No geocode result, just open with address
+        router.push(`/projects/new?address=${encodeURIComponent(address)}`)
+      }
+    } catch {
+      // On error, just open with address
+      router.push(`/projects/new?address=${encodeURIComponent(address)}`)
+    }
   }
 
   return (
