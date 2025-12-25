@@ -331,6 +331,154 @@ export function useDraw(map: Map | null) {
   useEffect(() => {
     if (!map) return
 
+    // Create custom icons for boxes - returns ImageData compatible with Mapbox
+    const createBoxIcon = (color: string, size: number, isTransition: boolean): { width: number; height: number; data: Uint8Array } | null => {
+      const canvas = document.createElement("canvas")
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return null
+
+      const scale = 4 // Higher resolution for crisp rendering
+      canvas.width = size * scale
+      canvas.height = size * scale
+      ctx.scale(scale, scale)
+
+      const padding = 2
+      const boxSize = size - padding * 2
+      const radius = isTransition ? 4 : 6
+
+      // Draw shadow
+      ctx.shadowColor = "rgba(0,0,0,0.3)"
+      ctx.shadowBlur = 4
+      ctx.shadowOffsetY = 2
+
+      // Draw rounded rectangle background
+      ctx.beginPath()
+      ctx.roundRect(padding, padding, boxSize, boxSize, radius)
+      ctx.fillStyle = color
+      ctx.fill()
+
+      // Remove shadow for stroke
+      ctx.shadowColor = "transparent"
+
+      // Draw white border
+      ctx.strokeStyle = "#ffffff"
+      ctx.lineWidth = 2
+      ctx.stroke()
+
+      if (isTransition) {
+        // Draw "T" symbol for transition box
+        ctx.fillStyle = "#ffffff"
+        ctx.font = `bold ${boxSize * 0.5}px sans-serif`
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        ctx.fillText("T", size / 2, size / 2 + 1)
+      } else {
+        // Draw grid pattern for stormwater box (catch basin style)
+        ctx.strokeStyle = "#ffffff"
+        ctx.lineWidth = 1.5
+        const gridPadding = padding + 4
+        const gridSize = boxSize - 8
+
+        // Horizontal lines
+        for (let i = 0; i <= 2; i++) {
+          const y = gridPadding + (gridSize / 2) * i
+          ctx.beginPath()
+          ctx.moveTo(gridPadding, y)
+          ctx.lineTo(gridPadding + gridSize, y)
+          ctx.stroke()
+        }
+
+        // Vertical lines
+        for (let i = 0; i <= 2; i++) {
+          const x = gridPadding + (gridSize / 2) * i
+          ctx.beginPath()
+          ctx.moveTo(x, gridPadding)
+          ctx.lineTo(x, gridPadding + gridSize)
+          ctx.stroke()
+        }
+      }
+
+      // Convert to Mapbox-compatible format
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      return {
+        width: canvas.width,
+        height: canvas.height,
+        data: new Uint8Array(imageData.data.buffer),
+      }
+    }
+
+    // Create downspout icon (circular with arrow)
+    const createDownspoutIcon = (color: string, size: number): { width: number; height: number; data: Uint8Array } | null => {
+      const canvas = document.createElement("canvas")
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return null
+
+      const scale = 4
+      canvas.width = size * scale
+      canvas.height = size * scale
+      ctx.scale(scale, scale)
+
+      const center = size / 2
+      const radius = size / 2 - 3
+
+      // Draw shadow
+      ctx.shadowColor = "rgba(0,0,0,0.3)"
+      ctx.shadowBlur = 3
+      ctx.shadowOffsetY = 1
+
+      // Draw circle
+      ctx.beginPath()
+      ctx.arc(center, center, radius, 0, Math.PI * 2)
+      ctx.fillStyle = color
+      ctx.fill()
+
+      ctx.shadowColor = "transparent"
+      ctx.strokeStyle = "#ffffff"
+      ctx.lineWidth = 2
+      ctx.stroke()
+
+      // Draw down arrow
+      ctx.fillStyle = "#ffffff"
+      ctx.beginPath()
+      const arrowSize = radius * 0.6
+      ctx.moveTo(center, center + arrowSize * 0.5)
+      ctx.lineTo(center - arrowSize * 0.5, center - arrowSize * 0.3)
+      ctx.lineTo(center - arrowSize * 0.2, center - arrowSize * 0.3)
+      ctx.lineTo(center - arrowSize * 0.2, center - arrowSize * 0.6)
+      ctx.lineTo(center + arrowSize * 0.2, center - arrowSize * 0.6)
+      ctx.lineTo(center + arrowSize * 0.2, center - arrowSize * 0.3)
+      ctx.lineTo(center + arrowSize * 0.5, center - arrowSize * 0.3)
+      ctx.closePath()
+      ctx.fill()
+
+      // Convert to Mapbox-compatible format
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      return {
+        width: canvas.width,
+        height: canvas.height,
+        data: new Uint8Array(imageData.data.buffer),
+      }
+    }
+
+    // Add images to map
+    const transitionIcon = createBoxIcon(ELEMENT_COLORS["transition-box"], 32, true)
+    const stormwaterIcon = createBoxIcon(ELEMENT_COLORS["stormwater-box"], 40, false)
+    const downspoutIcon = createDownspoutIcon(ELEMENT_COLORS["downspout"], 28)
+    const downspoutFailedIcon = createDownspoutIcon("#ef4444", 28)
+
+    if (transitionIcon && !map.hasImage("transition-box-icon")) {
+      map.addImage("transition-box-icon", transitionIcon, { pixelRatio: 4 })
+    }
+    if (stormwaterIcon && !map.hasImage("stormwater-box-icon")) {
+      map.addImage("stormwater-box-icon", stormwaterIcon, { pixelRatio: 4 })
+    }
+    if (downspoutIcon && !map.hasImage("downspout-icon")) {
+      map.addImage("downspout-icon", downspoutIcon, { pixelRatio: 4 })
+    }
+    if (downspoutFailedIcon && !map.hasImage("downspout-failed-icon")) {
+      map.addImage("downspout-failed-icon", downspoutFailedIcon, { pixelRatio: 4 })
+    }
+
     // Add source for ALL design features
     if (!map.getSource("design-features")) {
       map.addSource("design-features", {
@@ -492,52 +640,49 @@ export function useDraw(map: Map | null) {
         },
       })
 
-      // ===== POINT LAYERS =====
+      // ===== POINT LAYERS (using HD icons) =====
 
-      // Transition Box - blue square (using circle with border)
+      // Transition Box - rounded square with "T" symbol
       map.addLayer({
         id: "transition-boxes",
-        type: "circle",
+        type: "symbol",
         source: "design-features",
         filter: ["==", ["get", "elementType"], "transition-box"],
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 16, 10, 20, 18],
-          "circle-color": ELEMENT_COLORS["transition-box"],
-          "circle-stroke-width": 3,
-          "circle-stroke-color": "#ffffff",
+        layout: {
+          "icon-image": "transition-box-icon",
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 16, 0.7, 20, 1.4],
+          "icon-allow-overlap": true,
         },
       })
 
-      // Stormwater Box - sky blue larger circle
+      // Stormwater Box - larger rounded square with grid pattern
       map.addLayer({
         id: "stormwater-boxes",
-        type: "circle",
+        type: "symbol",
         source: "design-features",
         filter: ["==", ["get", "elementType"], "stormwater-box"],
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 16, 14, 20, 24],
-          "circle-color": ELEMENT_COLORS["stormwater-box"],
-          "circle-stroke-width": 4,
-          "circle-stroke-color": "#ffffff",
+        layout: {
+          "icon-image": "stormwater-box-icon",
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 16, 0.7, 20, 1.4],
+          "icon-allow-overlap": true,
         },
       })
 
-      // Downspout - gray small circle
+      // Downspout - circle with down arrow
       map.addLayer({
         id: "downspouts",
-        type: "circle",
+        type: "symbol",
         source: "design-features",
         filter: ["==", ["get", "elementType"], "downspout"],
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 16, 8, 20, 14],
-          "circle-color": [
+        layout: {
+          "icon-image": [
             "case",
             ["==", ["get", "status"], "failed"],
-            "#ef4444",
-            ELEMENT_COLORS["downspout"],
+            "downspout-failed-icon",
+            "downspout-icon",
           ],
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#ffffff",
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 16, 0.7, 20, 1.4],
+          "icon-allow-overlap": true,
         },
       })
 
