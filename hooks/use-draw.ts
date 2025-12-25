@@ -7,39 +7,74 @@ import * as turf from "@turf/turf"
 import { useToolStore, type ToolType } from "@/stores/tool-store"
 import { useDesignStore, type DesignFeature, type ElementType, ELEMENT_PRICES } from "@/stores/design-store"
 
+// Color palette for different element types
+export const ELEMENT_COLORS: Record<string, string> = {
+  // HydroBlox - Blue tones
+  "hydroblox-run": "#2563eb",    // Blue
+  "parallel-row": "#06b6d4",     // Cyan
+  "transition-box": "#3b82f6",   // Light blue
+  "stormwater-box": "#0ea5e9",   // Sky blue
+
+  // Water flow markers - Orange/Yellow
+  "flow-arrow": "#f97316",       // Orange
+  "standing-water": "#eab308",   // Yellow
+  "problem-area": "#ef4444",     // Red
+
+  // Existing features - Gray/Green
+  "existing-swale": "#22c55e",   // Green (working)
+  "existing-french-drain": "#10b981", // Emerald
+  "existing-pipe": "#14b8a6",    // Teal
+  "downspout": "#6b7280",        // Gray
+}
+
+// Labels for legend/display
+export const ELEMENT_LABELS: Record<string, string> = {
+  "hydroblox-run": "HydroBlox",
+  "parallel-row": "Parallel",
+  "transition-box": "T-Box",
+  "stormwater-box": "Storm",
+  "flow-arrow": "Flow",
+  "standing-water": "Water",
+  "problem-area": "Problem",
+  "existing-swale": "Swale",
+  "existing-french-drain": "French",
+  "existing-pipe": "Pipe",
+  "downspout": "DS",
+}
+
 // Tools that use click-to-place instead of draw mode
 const clickToPlaceTools: ToolType[] = ["transition-box", "stormwater-box", "downspout"]
 
-// Custom styles for different element types
+// Draw styles - used during active drawing (before feature is saved)
 const drawStyles = [
-  // HydroBlox runs - blue solid line
+  // Active line drawing - dashed to show it's not complete
   {
-    id: "gl-draw-line-hydroblox",
+    id: "gl-draw-line-active",
     type: "line",
-    filter: ["all", ["==", "$type", "LineString"], ["!=", "mode", "static"]],
+    filter: ["all", ["==", "$type", "LineString"], ["==", "active", "true"]],
+    paint: {
+      "line-color": "#2563eb",
+      "line-width": 4,
+      "line-dasharray": [2, 2],
+    },
+  },
+  // Inactive lines (shouldn't show - we use custom layers)
+  {
+    id: "gl-draw-line-inactive",
+    type: "line",
+    filter: ["all", ["==", "$type", "LineString"], ["==", "active", "false"]],
     paint: {
       "line-color": "#2563eb",
       "line-width": 4,
     },
   },
-  // Existing features - dashed lines
-  {
-    id: "gl-draw-line-existing",
-    type: "line",
-    filter: ["all", ["==", "$type", "LineString"], ["==", "mode", "static"]],
-    paint: {
-      "line-color": "#6b7280",
-      "line-width": 3,
-      "line-dasharray": [3, 2],
-    },
-  },
-  // Points for boxes
+  // Points during drawing
   {
     id: "gl-draw-point",
     type: "circle",
     filter: ["==", "$type", "Point"],
     paint: {
-      "circle-radius": 8,
+      "circle-radius": 6,
       "circle-color": "#2563eb",
       "circle-stroke-width": 2,
       "circle-stroke-color": "#ffffff",
@@ -52,7 +87,7 @@ const drawStyles = [
     filter: ["==", "$type", "Polygon"],
     paint: {
       "fill-color": "#2563eb",
-      "fill-opacity": 0.2,
+      "fill-opacity": 0.15,
     },
   },
   // Polygon outline
@@ -90,7 +125,6 @@ const drawStyles = [
 ]
 
 // Map tool types to draw modes and geometry types
-// Click-to-place tools use simple_select and handle clicks separately
 const toolConfig: Record<
   ToolType,
   { mode: string; geometryType: "line" | "point" | "polygon" | null; clickToPlace?: boolean }
@@ -293,13 +327,13 @@ export function useDraw(map: Map | null) {
     }
   }, [map, addFeature, setActiveTool])
 
-  // Set up custom layers for rendering features from design store
+  // Set up custom layers for rendering ALL features from design store
   useEffect(() => {
     if (!map) return
 
-    // Add source for point features (boxes, downspouts)
-    if (!map.getSource("design-points")) {
-      map.addSource("design-points", {
+    // Add source for ALL design features
+    if (!map.getSource("design-features")) {
+      map.addSource("design-features", {
         type: "geojson",
         data: {
           type: "FeatureCollection",
@@ -307,167 +341,338 @@ export function useDraw(map: Map | null) {
         },
       })
 
-      // Layer for transition boxes (squares)
+      // ===== LINE LAYERS =====
+
+      // HydroBlox Run - thick blue solid line
       map.addLayer({
-        id: "transition-boxes",
-        type: "circle",
-        source: "design-points",
-        filter: ["==", ["get", "elementType"], "transition-box"],
+        id: "hydroblox-runs",
+        type: "line",
+        source: "design-features",
+        filter: ["==", ["get", "elementType"], "hydroblox-run"],
         paint: {
-          "circle-radius": 12,
-          "circle-color": "#2563eb",
-          "circle-stroke-width": 3,
-          "circle-stroke-color": "#ffffff",
+          "line-color": ELEMENT_COLORS["hydroblox-run"],
+          "line-width": ["interpolate", ["linear"], ["zoom"], 16, 4, 20, 8],
+        },
+        layout: {
+          "line-cap": "round",
+          "line-join": "round",
         },
       })
 
-      // Layer for stormwater boxes (larger circles)
+      // Parallel Row - thick cyan dashed line
       map.addLayer({
-        id: "stormwater-boxes",
-        type: "circle",
-        source: "design-points",
-        filter: ["==", ["get", "elementType"], "stormwater-box"],
+        id: "parallel-rows",
+        type: "line",
+        source: "design-features",
+        filter: ["==", ["get", "elementType"], "parallel-row"],
         paint: {
-          "circle-radius": 18,
-          "circle-color": "#2563eb",
-          "circle-stroke-width": 3,
-          "circle-stroke-color": "#ffffff",
+          "line-color": ELEMENT_COLORS["parallel-row"],
+          "line-width": ["interpolate", ["linear"], ["zoom"], 16, 4, 20, 8],
+          "line-dasharray": [4, 2],
+        },
+        layout: {
+          "line-cap": "round",
+          "line-join": "round",
         },
       })
 
-      // Layer for downspouts (gray circles)
+      // Flow Arrow - orange with arrow pattern
       map.addLayer({
-        id: "downspouts",
-        type: "circle",
-        source: "design-points",
-        filter: ["==", ["get", "elementType"], "downspout"],
+        id: "flow-arrows",
+        type: "line",
+        source: "design-features",
+        filter: ["==", ["get", "elementType"], "flow-arrow"],
         paint: {
-          "circle-radius": 10,
-          "circle-color": [
-            "case",
-            ["==", ["get", "status"], "failed"],
-            "#ef4444",
-            "#6b7280",
-          ],
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#ffffff",
+          "line-color": ELEMENT_COLORS["flow-arrow"],
+          "line-width": ["interpolate", ["linear"], ["zoom"], 16, 3, 20, 6],
         },
-      })
-    }
-
-    // Add source for line features (existing drainage)
-    if (!map.getSource("design-lines")) {
-      map.addSource("design-lines", {
-        type: "geojson",
-        data: {
-          type: "FeatureCollection",
-          features: [],
+        layout: {
+          "line-cap": "round",
+          "line-join": "round",
         },
       })
 
-      // Layer for existing swales (dashed gray/red line)
+      // Existing Swale - green dashed
       map.addLayer({
         id: "existing-swales",
         type: "line",
-        source: "design-lines",
+        source: "design-features",
         filter: ["==", ["get", "elementType"], "existing-swale"],
         paint: {
           "line-color": [
             "case",
             ["==", ["get", "status"], "failed"],
             "#ef4444",
-            "#6b7280",
+            ELEMENT_COLORS["existing-swale"],
           ],
-          "line-width": 3,
-          "line-dasharray": [4, 4],
+          "line-width": ["interpolate", ["linear"], ["zoom"], 16, 3, 20, 6],
+          "line-dasharray": [6, 3],
         },
       })
 
-      // Layer for existing french drains (dotted gray/red line)
+      // Existing French Drain - emerald dotted
       map.addLayer({
         id: "existing-french-drains",
         type: "line",
-        source: "design-lines",
+        source: "design-features",
         filter: ["==", ["get", "elementType"], "existing-french-drain"],
         paint: {
           "line-color": [
             "case",
             ["==", ["get", "status"], "failed"],
             "#ef4444",
-            "#6b7280",
+            ELEMENT_COLORS["existing-french-drain"],
           ],
-          "line-width": 3,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 16, 3, 20, 6],
           "line-dasharray": [2, 2],
         },
       })
 
-      // Layer for existing pipes (solid gray/red line)
+      // Existing Pipe - teal solid
       map.addLayer({
         id: "existing-pipes",
         type: "line",
-        source: "design-lines",
+        source: "design-features",
         filter: ["==", ["get", "elementType"], "existing-pipe"],
         paint: {
           "line-color": [
             "case",
             ["==", ["get", "status"], "failed"],
             "#ef4444",
-            "#6b7280",
+            ELEMENT_COLORS["existing-pipe"],
           ],
-          "line-width": 3,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 16, 3, 20, 6],
+        },
+      })
+
+      // ===== POLYGON LAYERS =====
+
+      // Standing Water - yellow fill
+      map.addLayer({
+        id: "standing-water-fill",
+        type: "fill",
+        source: "design-features",
+        filter: ["==", ["get", "elementType"], "standing-water"],
+        paint: {
+          "fill-color": ELEMENT_COLORS["standing-water"],
+          "fill-opacity": 0.3,
+        },
+      })
+      map.addLayer({
+        id: "standing-water-outline",
+        type: "line",
+        source: "design-features",
+        filter: ["==", ["get", "elementType"], "standing-water"],
+        paint: {
+          "line-color": ELEMENT_COLORS["standing-water"],
+          "line-width": 2,
+        },
+      })
+
+      // Problem Area - red fill
+      map.addLayer({
+        id: "problem-area-fill",
+        type: "fill",
+        source: "design-features",
+        filter: ["==", ["get", "elementType"], "problem-area"],
+        paint: {
+          "fill-color": ELEMENT_COLORS["problem-area"],
+          "fill-opacity": 0.25,
+        },
+      })
+      map.addLayer({
+        id: "problem-area-outline",
+        type: "line",
+        source: "design-features",
+        filter: ["==", ["get", "elementType"], "problem-area"],
+        paint: {
+          "line-color": ELEMENT_COLORS["problem-area"],
+          "line-width": 2,
+          "line-dasharray": [4, 2],
+        },
+      })
+
+      // ===== POINT LAYERS =====
+
+      // Transition Box - blue square (using circle with border)
+      map.addLayer({
+        id: "transition-boxes",
+        type: "circle",
+        source: "design-features",
+        filter: ["==", ["get", "elementType"], "transition-box"],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 16, 10, 20, 18],
+          "circle-color": ELEMENT_COLORS["transition-box"],
+          "circle-stroke-width": 3,
+          "circle-stroke-color": "#ffffff",
+        },
+      })
+
+      // Stormwater Box - sky blue larger circle
+      map.addLayer({
+        id: "stormwater-boxes",
+        type: "circle",
+        source: "design-features",
+        filter: ["==", ["get", "elementType"], "stormwater-box"],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 16, 14, 20, 24],
+          "circle-color": ELEMENT_COLORS["stormwater-box"],
+          "circle-stroke-width": 4,
+          "circle-stroke-color": "#ffffff",
+        },
+      })
+
+      // Downspout - gray small circle
+      map.addLayer({
+        id: "downspouts",
+        type: "circle",
+        source: "design-features",
+        filter: ["==", ["get", "elementType"], "downspout"],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 16, 8, 20, 14],
+          "circle-color": [
+            "case",
+            ["==", ["get", "status"], "failed"],
+            "#ef4444",
+            ELEMENT_COLORS["downspout"],
+          ],
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#ffffff",
+        },
+      })
+
+      // ===== LABEL LAYERS =====
+      // Labels appear when zoomed in (zoom >= 18)
+
+      // Line labels
+      map.addLayer({
+        id: "line-labels",
+        type: "symbol",
+        source: "design-features",
+        filter: ["==", ["geometry-type"], "LineString"],
+        minzoom: 18,
+        layout: {
+          "symbol-placement": "line-center",
+          "text-field": [
+            "concat",
+            ["get", "label"],
+            " ",
+            ["to-string", ["get", "lengthFt"]],
+            "'"
+          ],
+          "text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 18, 11, 20, 14],
+          "text-allow-overlap": false,
+          "text-ignore-placement": false,
+        },
+        paint: {
+          "text-color": "#ffffff",
+          "text-halo-color": [
+            "match",
+            ["get", "elementType"],
+            "hydroblox-run", ELEMENT_COLORS["hydroblox-run"],
+            "parallel-row", ELEMENT_COLORS["parallel-row"],
+            "flow-arrow", ELEMENT_COLORS["flow-arrow"],
+            "existing-swale", ELEMENT_COLORS["existing-swale"],
+            "existing-french-drain", ELEMENT_COLORS["existing-french-drain"],
+            "existing-pipe", ELEMENT_COLORS["existing-pipe"],
+            "#2563eb"
+          ],
+          "text-halo-width": 2,
+        },
+      })
+
+      // Point labels
+      map.addLayer({
+        id: "point-labels",
+        type: "symbol",
+        source: "design-features",
+        filter: ["==", ["geometry-type"], "Point"],
+        minzoom: 17,
+        layout: {
+          "text-field": ["get", "label"],
+          "text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 17, 10, 20, 13],
+          "text-offset": [0, 1.8],
+          "text-anchor": "top",
+          "text-allow-overlap": false,
+        },
+        paint: {
+          "text-color": "#ffffff",
+          "text-halo-color": [
+            "match",
+            ["get", "elementType"],
+            "transition-box", ELEMENT_COLORS["transition-box"],
+            "stormwater-box", ELEMENT_COLORS["stormwater-box"],
+            "downspout", ELEMENT_COLORS["downspout"],
+            "#2563eb"
+          ],
+          "text-halo-width": 2,
+        },
+      })
+
+      // Polygon labels
+      map.addLayer({
+        id: "polygon-labels",
+        type: "symbol",
+        source: "design-features",
+        filter: ["==", ["geometry-type"], "Polygon"],
+        minzoom: 17,
+        layout: {
+          "text-field": ["get", "label"],
+          "text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 17, 12, 20, 16],
+          "text-allow-overlap": false,
+        },
+        paint: {
+          "text-color": "#ffffff",
+          "text-halo-color": [
+            "match",
+            ["get", "elementType"],
+            "standing-water", ELEMENT_COLORS["standing-water"],
+            "problem-area", ELEMENT_COLORS["problem-area"],
+            "#2563eb"
+          ],
+          "text-halo-width": 2,
         },
       })
     }
 
     // Subscribe to design store changes
     const unsubscribe = useDesignStore.subscribe((state) => {
-      // Update point features (include id in properties for click detection)
-      const pointSource = map.getSource("design-points")
-      if (pointSource && "setData" in pointSource) {
-        const pointFeatures = state.features
-          .filter((f) => f.geometry.type === "Point")
-          .map((f) => ({
-            ...f,
-            properties: { ...f.properties, id: f.id },
-          }))
-        pointSource.setData({
+      const source = map.getSource("design-features")
+      if (source && "setData" in source) {
+        // Add label and id to all features for rendering
+        const features = state.features.map((f) => ({
+          ...f,
+          properties: {
+            ...f.properties,
+            id: f.id,
+            label: ELEMENT_LABELS[f.properties.elementType] || f.properties.elementType,
+          },
+        }))
+        source.setData({
           type: "FeatureCollection",
-          features: pointFeatures,
-        })
-      }
-
-      // Update line features (only existing drainage types, include id in properties)
-      const lineSource = map.getSource("design-lines")
-      if (lineSource && "setData" in lineSource) {
-        const existingTypes = ["existing-swale", "existing-french-drain", "existing-pipe"]
-        const lineFeatures = state.features
-          .filter(
-            (f) =>
-              f.geometry.type === "LineString" &&
-              existingTypes.includes(f.properties.elementType)
-          )
-          .map((f) => ({
-            ...f,
-            properties: { ...f.properties, id: f.id },
-          }))
-        lineSource.setData({
-          type: "FeatureCollection",
-          features: lineFeatures,
+          features,
         })
       }
     })
 
     return () => {
       unsubscribe()
-      // Clean up layers and sources
-      if (map.getLayer("transition-boxes")) map.removeLayer("transition-boxes")
-      if (map.getLayer("stormwater-boxes")) map.removeLayer("stormwater-boxes")
-      if (map.getLayer("downspouts")) map.removeLayer("downspouts")
-      if (map.getLayer("existing-swales")) map.removeLayer("existing-swales")
-      if (map.getLayer("existing-french-drains")) map.removeLayer("existing-french-drains")
-      if (map.getLayer("existing-pipes")) map.removeLayer("existing-pipes")
-      if (map.getSource("design-points")) map.removeSource("design-points")
-      if (map.getSource("design-lines")) map.removeSource("design-lines")
+      // Clean up all layers and sources
+      const layersToRemove = [
+        "hydroblox-runs", "parallel-rows", "flow-arrows",
+        "existing-swales", "existing-french-drains", "existing-pipes",
+        "standing-water-fill", "standing-water-outline",
+        "problem-area-fill", "problem-area-outline",
+        "transition-boxes", "stormwater-boxes", "downspouts",
+        "line-labels", "point-labels", "polygon-labels",
+      ]
+      layersToRemove.forEach((layer) => {
+        if (map.getLayer(layer)) map.removeLayer(layer)
+      })
+      if (map.getSource("design-features")) map.removeSource("design-features")
     }
   }, [map])
 
@@ -540,32 +745,9 @@ export function useDraw(map: Map | null) {
       drawRef.current.deleteAll()
       useDesignStore.getState().clearFeatures()
 
-      // Add features to design store (not to draw for custom-rendered types)
-      const existingTypes = [
-        "existing-swale",
-        "existing-french-drain",
-        "existing-pipe",
-        "downspout",
-        "transition-box",
-        "stormwater-box",
-      ]
-
+      // Add features to design store (custom layers will render them)
       designData.features.forEach((feature) => {
-        // Add to design store
         addFeature(feature)
-
-        // Add line features to Mapbox Draw (except existing types which are custom-rendered)
-        if (
-          feature.geometry.type === "LineString" &&
-          !existingTypes.includes(feature.properties.elementType)
-        ) {
-          drawRef.current?.add(feature)
-        }
-
-        // Add polygon features to Mapbox Draw
-        if (feature.geometry.type === "Polygon") {
-          drawRef.current?.add(feature)
-        }
       })
 
       // Fit map bounds to features

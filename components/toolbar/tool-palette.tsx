@@ -32,12 +32,14 @@ import { useToolStore, type ToolType } from "@/stores/tool-store"
 import { useMapStore } from "@/stores/map-store"
 import { useScreenshot } from "@/hooks/use-screenshot"
 import { useIsMobile } from "@/hooks/use-media-query"
+import { ELEMENT_COLORS } from "@/hooks/use-draw"
 
 interface Tool {
   type: ToolType
   icon: LucideIcon
   label: string
   group: "general" | "hydroblox" | "water" | "existing"
+  lineStyle?: "solid" | "dashed" | "dotted"
 }
 
 interface Action {
@@ -48,16 +50,16 @@ interface Action {
 
 const tools: Tool[] = [
   { type: "select", icon: MousePointer, label: "Select", group: "general" },
-  { type: "hydroblox-run", icon: Minus, label: "HydroBlox Run", group: "hydroblox" },
-  { type: "parallel-row", icon: Minus, label: "Parallel Row", group: "hydroblox" },
+  { type: "hydroblox-run", icon: Minus, label: "HydroBlox Run", group: "hydroblox", lineStyle: "solid" },
+  { type: "parallel-row", icon: Minus, label: "Parallel Row", group: "hydroblox", lineStyle: "dashed" },
   { type: "transition-box", icon: Square, label: "Transition Box", group: "hydroblox" },
   { type: "stormwater-box", icon: Circle, label: "Stormwater Box", group: "hydroblox" },
-  { type: "flow-arrow", icon: ArrowRight, label: "Flow Arrow", group: "water" },
+  { type: "flow-arrow", icon: ArrowRight, label: "Flow Arrow", group: "water", lineStyle: "solid" },
   { type: "standing-water", icon: Droplets, label: "Standing Water", group: "water" },
   { type: "problem-area", icon: AlertTriangle, label: "Problem Area", group: "water" },
-  { type: "existing-swale", icon: Waves, label: "Existing Swale", group: "existing" },
-  { type: "existing-french-drain", icon: GitBranch, label: "French Drain", group: "existing" },
-  { type: "existing-pipe", icon: Pipette, label: "Pipe", group: "existing" },
+  { type: "existing-swale", icon: Waves, label: "Existing Swale", group: "existing", lineStyle: "dashed" },
+  { type: "existing-french-drain", icon: GitBranch, label: "French Drain", group: "existing", lineStyle: "dotted" },
+  { type: "existing-pipe", icon: Pipette, label: "Pipe", group: "existing", lineStyle: "solid" },
   { type: "downspout", icon: Home, label: "Downspout", group: "existing" },
 ]
 
@@ -176,6 +178,7 @@ function DesktopToolPalette() {
             {groupTools.map((tool) => {
               const Icon = tool.icon
               const isActive = activeTool === tool.type
+              const color = ELEMENT_COLORS[tool.type]
 
               return (
                 <button
@@ -202,7 +205,27 @@ function DesktopToolPalette() {
                     },
                   })}
                 >
-                  <Icon size={18} />
+                  {/* Color indicator */}
+                  {color && (
+                    <span
+                      className={css({
+                        width: "14px",
+                        height: tool.lineStyle ? "4px" : "14px",
+                        borderRadius: tool.lineStyle ? "1px" : "sm",
+                        flexShrink: 0,
+                      })}
+                      style={{
+                        backgroundColor: color,
+                        ...(tool.lineStyle === "dashed" && {
+                          background: `repeating-linear-gradient(90deg, ${color} 0px, ${color} 4px, transparent 4px, transparent 6px)`,
+                        }),
+                        ...(tool.lineStyle === "dotted" && {
+                          background: `repeating-linear-gradient(90deg, ${color} 0px, ${color} 2px, transparent 2px, transparent 4px)`,
+                        }),
+                      }}
+                    />
+                  )}
+                  {!color && <Icon size={18} />}
                   <span>{tool.label}</span>
                 </button>
               )
@@ -683,6 +706,7 @@ function MobileToolPalette() {
                     {groupTools.map((tool) => {
                       const Icon = tool.icon
                       const isActive = activeTool === tool.type
+                      const color = ELEMENT_COLORS[tool.type]
 
                       return (
                         <button
@@ -708,7 +732,28 @@ function MobileToolPalette() {
                             _active: { transform: "scale(0.95)" },
                           })}
                         >
-                          <Icon size={24} />
+                          {/* Color indicator for mobile */}
+                          {color ? (
+                            <span
+                              className={css({
+                                width: tool.lineStyle ? "24px" : "20px",
+                                height: tool.lineStyle ? "6px" : "20px",
+                                borderRadius: tool.lineStyle ? "2px" : "md",
+                                mb: "1",
+                              })}
+                              style={{
+                                backgroundColor: color,
+                                ...(tool.lineStyle === "dashed" && {
+                                  background: `repeating-linear-gradient(90deg, ${color} 0px, ${color} 5px, transparent 5px, transparent 8px)`,
+                                }),
+                                ...(tool.lineStyle === "dotted" && {
+                                  background: `repeating-linear-gradient(90deg, ${color} 0px, ${color} 3px, transparent 3px, transparent 6px)`,
+                                }),
+                              }}
+                            />
+                          ) : (
+                            <Icon size={24} />
+                          )}
                           <span
                             className={css({
                               fontSize: "xs",
