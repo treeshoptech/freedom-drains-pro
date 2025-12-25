@@ -582,13 +582,22 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
   } | null>(null)
   const [isCreating, setIsCreating] = useState(false)
 
+  // Debug: log when selectedLocation changes
+  useEffect(() => {
+    console.log("selectedLocation changed:", selectedLocation)
+  }, [selectedLocation])
+
   const handleCreate = () => {
-    if (!selectedLocation) return
+    console.log("handleCreate called, selectedLocation:", selectedLocation)
+    if (!selectedLocation) {
+      console.log("No selectedLocation, returning early")
+      return
+    }
 
     setIsCreating(true)
-    router.push(
-      `/projects/new?address=${encodeURIComponent(selectedLocation.address)}&lat=${selectedLocation.lat}&lng=${selectedLocation.lng}`
-    )
+    const url = `/projects/new?address=${encodeURIComponent(selectedLocation.address)}&lat=${selectedLocation.lat}&lng=${selectedLocation.lng}`
+    console.log("Navigating to:", url)
+    router.push(url)
   }
 
   return (

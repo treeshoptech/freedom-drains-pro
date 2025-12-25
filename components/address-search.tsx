@@ -68,24 +68,29 @@ export function AddressSearch({
   }, [])
 
   const retrieveAddress = useCallback(async (suggestion: Suggestion) => {
+    console.log("retrieveAddress called with:", suggestion)
     try {
-      const response = await fetch(
-        `https://api.mapbox.com/search/searchbox/v1/retrieve/${suggestion.id}?` +
+      const url = `https://api.mapbox.com/search/searchbox/v1/retrieve/${suggestion.id}?` +
         `access_token=${process.env.NEXT_PUBLIC_MAPBOX_TOKEN}` +
         `&session_token=${sessionToken.current}`
-      )
+      console.log("Fetching:", url.replace(process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "", "***"))
+
+      const response = await fetch(url)
+      console.log("Response status:", response.status)
 
       if (!response.ok) {
         throw new Error(`Retrieve failed: ${response.status}`)
       }
 
       const data = await response.json()
+      console.log("Retrieve data:", data)
 
       if (data.features && data.features[0]) {
         const feature = data.features[0]
         const [lng, lat] = feature.geometry.coordinates
         const address = feature.properties.full_address || suggestion.full_address || suggestion.name
 
+        console.log("Calling onSelect with:", { address, lat, lng })
         onChange(address)
         onSelect({ address, lat, lng })
         setIsOpen(false)
@@ -96,8 +101,7 @@ export function AddressSearch({
         // Fallback: use suggestion data directly if retrieve returns no features
         const address = suggestion.full_address || suggestion.name
         onChange(address)
-        // Can't proceed without coordinates from retrieve
-        console.warn("No features returned from retrieve API")
+        console.warn("No features returned from retrieve API, cannot get coordinates")
         setIsOpen(false)
         setSuggestions([])
       }
