@@ -3,12 +3,13 @@
 import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import { css } from "styled-system/css"
-import { ArrowLeft, Save, Check, Loader2, AlertCircle } from "lucide-react"
+import { ArrowLeft, Save, Check, Loader2, AlertCircle, Menu } from "lucide-react"
 import { DesignMap } from "@/components/map/design-map"
 import { ToolPalette } from "@/components/toolbar/tool-palette"
 import { CostPanel } from "@/components/calculator/cost-panel"
 import { useProjectStore } from "@/stores/project-store"
 import { useAutoSave } from "@/hooks/use-auto-save"
+import { useIsMobile } from "@/hooks/use-media-query"
 import type { Project } from "@/lib/actions/projects"
 
 interface ProjectEditorProps {
@@ -19,6 +20,7 @@ export function ProjectEditor({ project }: ProjectEditorProps) {
   const [mapReady, setMapReady] = useState(false)
   const { loadFromProject, projectName, saveStatus } = useProjectStore()
   const { save, isSaving, lastSaved } = useAutoSave()
+  const isMobile = useIsMobile()
 
   // Load project data on mount
   useEffect(() => {
@@ -38,7 +40,7 @@ export function ProjectEditor({ project }: ProjectEditorProps) {
       className={css({
         display: "flex",
         flexDirection: "column",
-        height: "100vh",
+        height: "100dvh",
         overflow: "hidden",
       })}
     >
@@ -53,29 +55,53 @@ export function ProjectEditor({ project }: ProjectEditorProps) {
           bg: "white",
           borderBottom: "1px solid",
           borderColor: "gray.200",
+          zIndex: 30,
+          "@media (max-width: 767px)": {
+            px: "3",
+            py: "2",
+          },
         })}
       >
-        <div className={css({ display: "flex", alignItems: "center", gap: "4" })}>
+        <div className={css({ display: "flex", alignItems: "center", gap: "3", minWidth: 0 })}>
           <Link
             href="/projects"
             className={css({
               display: "flex",
               alignItems: "center",
-              gap: "2",
+              justifyContent: "center",
+              minWidth: "44px",
+              minHeight: "44px",
               color: "gray.600",
-              fontSize: "sm",
               textDecoration: "none",
-              _hover: { color: "gray.900" },
+              borderRadius: "lg",
+              _hover: { color: "gray.900", bg: "gray.50" },
+              "@media (max-width: 767px)": {
+                minWidth: "40px",
+                minHeight: "40px",
+              },
             })}
           >
-            <ArrowLeft size={16} />
-            Projects
+            <ArrowLeft size={20} />
+            <span
+              className={css({
+                ml: "1",
+                fontSize: "sm",
+                "@media (max-width: 767px)": {
+                  display: "none",
+                },
+              })}
+            >
+              Projects
+            </span>
           </Link>
           <div
             className={css({
               height: "4",
               width: "1px",
               bg: "gray.200",
+              "@media (max-width: 767px)": {
+                display: "none",
+              },
             })}
           />
           <h1
@@ -83,15 +109,30 @@ export function ProjectEditor({ project }: ProjectEditorProps) {
               fontSize: "lg",
               fontWeight: "semibold",
               color: "gray.900",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              "@media (max-width: 767px)": {
+                fontSize: "base",
+                maxWidth: "150px",
+              },
             })}
           >
             {projectName}
           </h1>
         </div>
 
-        <div className={css({ display: "flex", alignItems: "center", gap: "3" })}>
-          {/* Save status indicator */}
-          <SaveIndicator status={saveStatus} lastSaved={lastSaved} />
+        <div className={css({ display: "flex", alignItems: "center", gap: "2" })}>
+          {/* Save status indicator - hidden on mobile */}
+          <div
+            className={css({
+              "@media (max-width: 767px)": {
+                display: "none",
+              },
+            })}
+          >
+            <SaveIndicator status={saveStatus} lastSaved={lastSaved} />
+          </div>
 
           {/* Save button */}
           <button
@@ -100,9 +141,12 @@ export function ProjectEditor({ project }: ProjectEditorProps) {
             className={css({
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: "2",
               px: "4",
               py: "2",
+              minWidth: "44px",
+              minHeight: "44px",
               bg: "blue.500",
               color: "white",
               borderRadius: "lg",
@@ -111,14 +155,27 @@ export function ProjectEditor({ project }: ProjectEditorProps) {
               cursor: "pointer",
               _hover: { bg: "blue.600" },
               _disabled: { opacity: 0.5, cursor: "not-allowed" },
+              "@media (max-width: 767px)": {
+                px: "3",
+              },
             })}
           >
             {isSaving ? (
-              <Loader2 size={16} className={css({ animation: "spin 1s linear infinite" })} />
+              <Loader2 size={18} className={css({ animation: "spin 1s linear infinite" })} />
+            ) : saveStatus === "saved" ? (
+              <Check size={18} />
             ) : (
-              <Save size={16} />
+              <Save size={18} />
             )}
-            Save
+            <span
+              className={css({
+                "@media (max-width: 767px)": {
+                  display: "none",
+                },
+              })}
+            >
+              {isSaving ? "Saving..." : saveStatus === "saved" ? "Saved" : "Save"}
+            </span>
           </button>
         </div>
       </header>
@@ -129,13 +186,23 @@ export function ProjectEditor({ project }: ProjectEditorProps) {
           display: "flex",
           flex: 1,
           overflow: "hidden",
+          position: "relative",
         })}
       >
-        {/* Tool Palette */}
-        <ToolPalette />
+        {/* Tool Palette - Desktop sidebar / Mobile bottom bar */}
+        {!isMobile && <ToolPalette />}
 
         {/* Map */}
-        <div className={css({ flex: 1, position: "relative" })}>
+        <div
+          className={css({
+            flex: 1,
+            position: "relative",
+            "@media (max-width: 767px)": {
+              // Account for mobile bottom bar
+              pb: "60px",
+            },
+          })}
+        >
           <DesignMap
             center={[project.lng, project.lat]}
             zoom={18}
@@ -146,9 +213,17 @@ export function ProjectEditor({ project }: ProjectEditorProps) {
           {mapReady && <DesignLoader designData={project.design_data} />}
         </div>
 
-        {/* Cost Panel */}
-        <CostPanel />
+        {/* Cost Panel - Desktop sidebar / Mobile FAB + sheet */}
+        {!isMobile && <CostPanel />}
       </div>
+
+      {/* Mobile-only components */}
+      {isMobile && (
+        <>
+          <ToolPalette />
+          <CostPanel />
+        </>
+      )}
     </div>
   )
 }
