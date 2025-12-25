@@ -68,48 +68,56 @@ export function AddressSearch({
   }, [])
 
   const retrieveAddress = useCallback(async (suggestion: Suggestion) => {
-    console.log("retrieveAddress called with:", suggestion)
+    const addressText = suggestion.full_address || `${suggestion.name}, ${suggestion.place_formatted}`
+
     try {
+      // Try the Mapbox retrieve API first
       const url = `https://api.mapbox.com/search/searchbox/v1/retrieve/${suggestion.id}?` +
         `access_token=${process.env.NEXT_PUBLIC_MAPBOX_TOKEN}` +
         `&session_token=${sessionToken.current}`
-      console.log("Fetching:", url.replace(process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "", "***"))
 
       const response = await fetch(url)
-      console.log("Response status:", response.status)
 
-      if (!response.ok) {
-        throw new Error(`Retrieve failed: ${response.status}`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.features && data.features[0]) {
+          const feature = data.features[0]
+          const [lng, lat] = feature.geometry.coordinates
+          const address = feature.properties.full_address || addressText
+
+          onChange(address)
+          onSelect({ address, lat, lng })
+          setIsOpen(false)
+          setSuggestions([])
+          sessionToken.current = crypto.randomUUID()
+          return
+        }
       }
 
-      const data = await response.json()
-      console.log("Retrieve data:", data)
+      // Fallback to geocode API if retrieve fails
+      console.log("Retrieve failed, trying geocode API fallback")
+      const geocodeRes = await fetch(`/api/geocode?address=${encodeURIComponent(addressText)}`)
+      const geocodeData = await geocodeRes.json()
 
-      if (data.features && data.features[0]) {
-        const feature = data.features[0]
-        const [lng, lat] = feature.geometry.coordinates
-        const address = feature.properties.full_address || suggestion.full_address || suggestion.name
+      if (geocodeData.features && geocodeData.features[0]) {
+        const feature = geocodeData.features[0]
+        const [lng, lat] = feature.center
+        const address = feature.place_name || addressText
 
-        console.log("Calling onSelect with:", { address, lat, lng })
         onChange(address)
         onSelect({ address, lat, lng })
         setIsOpen(false)
         setSuggestions([])
-        // Generate new session token for next search
         sessionToken.current = crypto.randomUUID()
       } else {
-        // Fallback: use suggestion data directly if retrieve returns no features
-        const address = suggestion.full_address || suggestion.name
-        onChange(address)
-        console.warn("No features returned from retrieve API, cannot get coordinates")
+        console.error("Both retrieve and geocode APIs failed")
+        onChange(addressText)
         setIsOpen(false)
         setSuggestions([])
       }
     } catch (error) {
       console.error("Address retrieve error:", error)
-      // Fallback: just use the suggestion name
-      const address = suggestion.full_address || suggestion.name
-      onChange(address)
+      onChange(addressText)
       setIsOpen(false)
       setSuggestions([])
     }
