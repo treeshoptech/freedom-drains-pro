@@ -28,6 +28,7 @@ export function AddressSearch({
   autoFocus = false,
 }: AddressSearchProps) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -145,8 +146,23 @@ export function AddressSearch({
     inputRef.current?.focus()
   }
 
+  const handleSuggestionClick = (suggestion: Suggestion) => {
+    retrieveAddress(suggestion)
+  }
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
   return (
-    <div className={css({ position: "relative", width: "100%" })}>
+    <div ref={containerRef} className={css({ position: "relative", width: "100%" })}>
       <div className={css({ position: "relative" })}>
         <MapPin
           size={18}
@@ -155,7 +171,7 @@ export function AddressSearch({
             left: "14px",
             top: "50%",
             transform: "translateY(-50%)",
-            color: "gray.400",
+            color: "#6b7280",
             pointerEvents: "none",
           })}
         />
@@ -166,7 +182,6 @@ export function AddressSearch({
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           onFocus={() => suggestions.length > 0 && setIsOpen(true)}
-          onBlur={() => setTimeout(() => setIsOpen(false), 200)}
           placeholder={placeholder}
           className={css({
             width: "100%",
@@ -175,15 +190,16 @@ export function AddressSearch({
             py: "3",
             fontSize: "base",
             border: "1px solid",
-            borderColor: "gray.300",
+            borderColor: "#374151",
             borderRadius: "lg",
-            bg: "white",
+            bg: "#1f2937",
+            color: "white",
             outline: "none",
             _focus: {
-              borderColor: "blue.500",
-              boxShadow: "0 0 0 3px rgba(59, 130, 246, 0.1)",
+              borderColor: "#0087FF",
+              boxShadow: "0 0 0 3px rgba(0, 135, 255, 0.15)",
             },
-            _placeholder: { color: "gray.400" },
+            _placeholder: { color: "#6b7280" },
           })}
         />
         {value && (
@@ -196,10 +212,10 @@ export function AddressSearch({
               top: "50%",
               transform: "translateY(-50%)",
               p: "1",
-              color: "gray.400",
+              color: "#6b7280",
               borderRadius: "full",
               cursor: "pointer",
-              _hover: { color: "gray.600", bg: "gray.100" },
+              _hover: { color: "#d1d5db", bg: "#374151" },
             })}
           >
             <X size={16} />
@@ -216,21 +232,23 @@ export function AddressSearch({
             left: 0,
             right: 0,
             mt: "1",
-            bg: "white",
+            bg: "#1f2937",
             border: "1px solid",
-            borderColor: "gray.200",
+            borderColor: "#374151",
             borderRadius: "lg",
-            shadow: "lg",
+            shadow: "0 4px 20px rgba(0, 0, 0, 0.5)",
             zIndex: 50,
             maxHeight: "300px",
             overflowY: "auto",
           })}
         >
           {suggestions.map((suggestion, index) => (
-            <button
+            <div
               key={suggestion.id}
-              type="button"
-              onClick={() => retrieveAddress(suggestion)}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                handleSuggestionClick(suggestion)
+              }}
               className={css({
                 width: "100%",
                 display: "flex",
@@ -240,24 +258,24 @@ export function AddressSearch({
                 py: "3",
                 textAlign: "left",
                 cursor: "pointer",
-                bg: index === selectedIndex ? "blue.50" : "transparent",
-                _hover: { bg: "gray.50" },
+                bg: index === selectedIndex ? "rgba(0, 135, 255, 0.15)" : "transparent",
+                _hover: { bg: "#374151" },
                 borderBottom: index < suggestions.length - 1 ? "1px solid" : "none",
-                borderColor: "gray.100",
+                borderColor: "#374151",
               })}
             >
-              <MapPin size={16} className={css({ color: "gray.400", mt: "1", flexShrink: 0 })} />
+              <MapPin size={16} className={css({ color: "#6b7280", mt: "1", flexShrink: 0 })} />
               <div className={css({ minWidth: 0 })}>
-                <div className={css({ fontSize: "sm", fontWeight: "medium", color: "gray.900" })}>
+                <div className={css({ fontSize: "sm", fontWeight: "medium", color: "white" })}>
                   {suggestion.name}
                 </div>
                 {suggestion.place_formatted && (
-                  <div className={css({ fontSize: "xs", color: "gray.500", mt: "0.5" })}>
+                  <div className={css({ fontSize: "xs", color: "#9ca3af", mt: "0.5" })}>
                     {suggestion.place_formatted}
                   </div>
                 )}
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}
@@ -273,12 +291,12 @@ export function AddressSearch({
             py: "3",
             textAlign: "center",
             fontSize: "sm",
-            color: "gray.500",
-            bg: "white",
+            color: "#9ca3af",
+            bg: "#1f2937",
             border: "1px solid",
-            borderColor: "gray.200",
+            borderColor: "#374151",
             borderRadius: "lg",
-            shadow: "lg",
+            shadow: "0 4px 20px rgba(0, 0, 0, 0.5)",
           })}
         >
           Searching...
