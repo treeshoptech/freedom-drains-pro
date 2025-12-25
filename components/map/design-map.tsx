@@ -1,44 +1,58 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import mapboxgl from "mapbox-gl"
+import "mapbox-gl/dist/mapbox-gl.css"
+import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css"
+import { useDraw } from "@/hooks/use-draw"
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!
 
 interface DesignMapProps {
   center?: [number, number]
   zoom?: number
+  enableDrawing?: boolean
   onMapReady?: (map: mapboxgl.Map) => void
 }
 
 export function DesignMap({
   center = [-80.9270, 29.0258], // New Smyrna Beach default
   zoom = 18,
+  enableDrawing = true,
   onMapReady,
 }: DesignMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
-  const map = useRef<mapboxgl.Map | null>(null)
+  const mapRef = useRef<mapboxgl.Map | null>(null)
+  const [mapInstance, setMapInstance] = useState<mapboxgl.Map | null>(null)
+
+  // Initialize drawing tools
+  useDraw(enableDrawing ? mapInstance : null)
 
   useEffect(() => {
-    if (map.current || !mapContainer.current) return
+    if (mapRef.current || !mapContainer.current) return
 
-    map.current = new mapboxgl.Map({
+    const newMap = new mapboxgl.Map({
       container: mapContainer.current,
       style: "mapbox://styles/mapbox/satellite-v9",
       center,
       zoom,
     })
 
-    map.current.addControl(new mapboxgl.NavigationControl(), "top-right")
+    mapRef.current = newMap
 
-    map.current.on("load", () => {
-      if (onMapReady && map.current) {
-        onMapReady(map.current)
+    newMap.addControl(new mapboxgl.NavigationControl(), "top-right")
+
+    newMap.on("load", () => {
+      setMapInstance(newMap)
+      if (onMapReady) {
+        onMapReady(newMap)
       }
     })
 
     return () => {
-      map.current?.remove()
+      mapRef.current?.remove()
+      mapRef.current = null
+      setMapInstance(null)
     }
   }, [center, zoom, onMapReady])
 

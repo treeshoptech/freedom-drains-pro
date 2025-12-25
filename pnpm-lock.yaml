@@ -63,6 +63,9 @@ importers:
       '@park-ui/panda-preset':
         specifier: ^0.43.1
         version: 0.43.1(@internationalized/date@3.10.0)(@pandacss/dev@1.7.1(typescript@5.9.3))
+      '@types/geojson':
+        specifier: ^7946.0.16
+        version: 7946.0.16
       '@types/mapbox-gl':
         specifier: ^3.4.1
         version: 3.4.1
