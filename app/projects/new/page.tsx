@@ -111,6 +111,9 @@ function NewProjectContent() {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
+              gap: "1",
+              px: "2",
+              py: "2",
               minWidth: "44px",
               minHeight: "44px",
               color: "gray.600",
@@ -120,6 +123,16 @@ function NewProjectContent() {
             })}
           >
             <ArrowLeft size={20} />
+            <span
+              className={css({
+                fontSize: "sm",
+                "@media (max-width: 767px)": {
+                  display: "none",
+                },
+              })}
+            >
+              Cancel
+            </span>
           </Link>
           <div className={css({ minWidth: 0 })}>
             <input

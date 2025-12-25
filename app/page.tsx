@@ -1,52 +1,90 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { css } from "styled-system/css"
-import { MapPin, Search, Loader2, ArrowRight } from "lucide-react"
 import Link from "next/link"
+import { css } from "styled-system/css"
+import {
+  Plus,
+  Search,
+  Trash2,
+  MapPin,
+  DollarSign,
+  Clock,
+  Loader2,
+  X,
+  ChevronRight,
+  FolderOpen,
+} from "lucide-react"
+import { AddressSearch } from "@/components/address-search"
+import { listProjects, deleteProject } from "@/lib/actions/projects"
+import type { ProjectListItem } from "@/lib/actions/projects"
 
-export default function Home() {
+export default function HomePage() {
   const router = useRouter()
-  const [address, setAddress] = useState("")
-  const [isSearching, setIsSearching] = useState(false)
-  const [error, setError] = useState("")
+  const [projects, setProjects] = useState<ProjectListItem[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!address.trim()) return
+  // Load projects on mount
+  useEffect(() => {
+    loadProjects()
+  }, [])
 
-    setIsSearching(true)
-    setError("")
-
-    try {
-      const response = await fetch(
-        `/api/geocode?address=${encodeURIComponent(address)}`
-      )
-      const data = await response.json()
-
-      if (data.error) {
-        setError(data.error)
-        setIsSearching(false)
-        return
-      }
-
-      // Store in sessionStorage for the new project page
-      sessionStorage.setItem(
-        "newProject",
-        JSON.stringify({
-          address: data.address,
-          lat: data.lat,
-          lng: data.lng,
-        })
-      )
-
-      // Navigate to create new project (we'll need to handle this)
-      router.push(`/projects/new?address=${encodeURIComponent(data.address)}&lat=${data.lat}&lng=${data.lng}`)
-    } catch (err) {
-      setError("Failed to search address")
-      setIsSearching(false)
+  async function loadProjects() {
+    setIsLoading(true)
+    const { projects, error } = await listProjects()
+    if (projects) {
+      setProjects(projects)
     }
+    setIsLoading(false)
+  }
+
+  async function handleDelete(id: string) {
+    const { success } = await deleteProject(id)
+    if (success) {
+      setProjects((prev) => prev.filter((p) => p.id !== id))
+    }
+    setDeleteConfirm(null)
+  }
+
+  // Filter projects by search query
+  const filteredProjects = projects.filter(
+    (p) =>
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.address.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "draft":
+        return { bg: "gray.100", text: "gray.600" }
+      case "quoted":
+        return { bg: "blue.100", text: "blue.700" }
+      case "approved":
+        return { bg: "green.100", text: "green.700" }
+      case "completed":
+        return { bg: "purple.100", text: "purple.700" }
+      default:
+        return { bg: "gray.100", text: "gray.600" }
+    }
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+
+    if (diffMins < 1) return "Just now"
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+    if (diffDays < 7) return `${diffDays}d ago`
+    return date.toLocaleDateString()
   }
 
   return (
@@ -54,8 +92,6 @@ export default function Home() {
       className={css({
         minHeight: "100vh",
         bg: "gray.50",
-        display: "flex",
-        flexDirection: "column",
       })}
     >
       {/* Header */}
@@ -64,17 +100,25 @@ export default function Home() {
           bg: "white",
           borderBottom: "1px solid",
           borderColor: "gray.200",
-          px: "4",
-          py: "3",
+          position: "sticky",
+          top: 0,
+          zIndex: 20,
         })}
       >
         <div
           className={css({
             maxWidth: "1200px",
             mx: "auto",
+            px: "4",
+            py: "4",
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
+            justifyContent: "space-between",
+            gap: "4",
+            "@media (max-width: 640px)": {
+              flexDirection: "column",
+              alignItems: "stretch",
+            },
           })}
         >
           <h1
@@ -82,227 +126,564 @@ export default function Home() {
               fontSize: "xl",
               fontWeight: "bold",
               color: "blue.600",
+              whiteSpace: "nowrap",
             })}
           >
             Freedom Drains Pro
           </h1>
-          <Link
-            href="/projects"
-            className={css({
-              display: "flex",
-              alignItems: "center",
-              gap: "2",
-              px: "4",
-              py: "2",
-              color: "gray.600",
-              fontSize: "sm",
-              textDecoration: "none",
-              borderRadius: "lg",
-              _hover: { bg: "gray.100", color: "gray.900" },
-            })}
-          >
-            My Projects
-            <ArrowRight size={16} />
-          </Link>
-        </div>
-      </header>
 
-      {/* Hero */}
-      <main
-        className={css({
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          px: "4",
-          py: "16",
-        })}
-      >
-        <div
-          className={css({
-            maxWidth: "600px",
-            width: "100%",
-            textAlign: "center",
-          })}
-        >
           <div
             className={css({
-              width: "80px",
-              height: "80px",
-              bg: "blue.100",
-              borderRadius: "2xl",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              mx: "auto",
-              mb: "6",
-            })}
-          >
-            <MapPin size={40} className={css({ color: "blue.600" })} />
-          </div>
-
-          <h2
-            className={css({
-              fontSize: "3xl",
-              fontWeight: "bold",
-              color: "gray.900",
-              mb: "3",
-              "@media (max-width: 767px)": {
-                fontSize: "2xl",
+              gap: "3",
+              flex: 1,
+              maxWidth: "500px",
+              "@media (max-width: 640px)": {
+                maxWidth: "100%",
               },
             })}
           >
-            Design Drainage Solutions
-          </h2>
-
-          <p
-            className={css({
-              fontSize: "lg",
-              color: "gray.600",
-              mb: "8",
-              "@media (max-width: 767px)": {
-                fontSize: "base",
-              },
-            })}
-          >
-            Enter an address to start designing a HydroBlox drainage system with instant cost calculations.
-          </p>
-
-          {/* Search Form */}
-          <form onSubmit={handleSearch}>
-            <div
-              className={css({
-                display: "flex",
-                gap: "2",
-                mb: "4",
-                "@media (max-width: 767px)": {
-                  flexDirection: "column",
-                },
-              })}
-            >
-              <div className={css({ flex: 1, position: "relative" })}>
-                <MapPin
-                  size={18}
-                  className={css({
-                    position: "absolute",
-                    left: "16px",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    color: "gray.400",
-                  })}
-                />
-                <input
-                  type="text"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Enter property address..."
-                  className={css({
-                    width: "100%",
-                    pl: "12",
-                    pr: "4",
-                    py: "4",
-                    fontSize: "base",
-                    border: "1px solid",
-                    borderColor: error ? "red.300" : "gray.300",
-                    borderRadius: "xl",
-                    bg: "white",
-                    outline: "none",
-                    _focus: {
-                      borderColor: "blue.500",
-                      boxShadow: "0 0 0 3px rgba(59, 130, 246, 0.1)",
-                    },
-                    _placeholder: { color: "gray.400" },
-                  })}
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={isSearching || !address.trim()}
+            <div className={css({ position: "relative", flex: 1 })}>
+              <Search
+                size={18}
                 className={css({
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "2",
-                  px: "6",
-                  py: "4",
-                  bg: "blue.500",
-                  color: "white",
-                  borderRadius: "xl",
-                  fontSize: "base",
-                  fontWeight: "semibold",
-                  cursor: "pointer",
-                  transition: "all 0.15s",
-                  _hover: { bg: "blue.600" },
-                  _disabled: { opacity: 0.5, cursor: "not-allowed" },
-                  "@media (max-width: 767px)": {
-                    width: "100%",
-                  },
+                  position: "absolute",
+                  left: "12px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "gray.400",
+                  pointerEvents: "none",
                 })}
-              >
-                {isSearching ? (
-                  <Loader2 size={20} className={css({ animation: "spin 1s linear infinite" })} />
-                ) : (
-                  <Search size={20} />
-                )}
-                {isSearching ? "Searching..." : "Start Design"}
-              </button>
+              />
+              <input
+                type="text"
+                placeholder="Search projects..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={css({
+                  width: "100%",
+                  pl: "10",
+                  pr: "4",
+                  py: "2.5",
+                  fontSize: "sm",
+                  border: "1px solid",
+                  borderColor: "gray.300",
+                  borderRadius: "lg",
+                  bg: "white",
+                  outline: "none",
+                  _focus: { borderColor: "blue.500" },
+                  _placeholder: { color: "gray.400" },
+                })}
+              />
             </div>
 
-            {error && (
-              <p className={css({ color: "red.600", fontSize: "sm", textAlign: "left" })}>
-                {error}
-              </p>
-            )}
-          </form>
-
-          {/* Quick links */}
-          <div
-            className={css({
-              mt: "8",
-              pt: "8",
-              borderTop: "1px solid",
-              borderColor: "gray.200",
-            })}
-          >
-            <p className={css({ fontSize: "sm", color: "gray.500", mb: "3" })}>
-              Or continue with an existing project
-            </p>
-            <Link
-              href="/projects"
+            <button
+              onClick={() => setShowNewProjectModal(true)}
               className={css({
-                display: "inline-flex",
+                display: "flex",
                 alignItems: "center",
                 gap: "2",
                 px: "4",
-                py: "2",
-                bg: "gray.100",
-                color: "gray.700",
+                py: "2.5",
+                bg: "blue.500",
+                color: "white",
                 borderRadius: "lg",
                 fontSize: "sm",
-                fontWeight: "medium",
-                textDecoration: "none",
-                _hover: { bg: "gray.200" },
+                fontWeight: "semibold",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                _hover: { bg: "blue.600" },
               })}
             >
-              View All Projects
-              <ArrowRight size={16} />
-            </Link>
+              <Plus size={18} />
+              <span className={css({ "@media (max-width: 480px)": { display: "none" } })}>
+                New Project
+              </span>
+            </button>
           </div>
         </div>
-      </main>
+      </header>
 
-      {/* Footer */}
-      <footer
+      {/* Main Content */}
+      <main
         className={css({
-          py: "4",
-          textAlign: "center",
-          color: "gray.400",
-          fontSize: "sm",
+          maxWidth: "1200px",
+          mx: "auto",
+          px: "4",
+          py: "6",
         })}
       >
-        Freedom Drains Pro - Drainage Design Tool
-      </footer>
+        {isLoading ? (
+          <div
+            className={css({
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              py: "20",
+            })}
+          >
+            <Loader2 size={32} className={css({ animation: "spin 1s linear infinite", color: "blue.500" })} />
+          </div>
+        ) : filteredProjects.length === 0 ? (
+          <div
+            className={css({
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              py: "20",
+              textAlign: "center",
+            })}
+          >
+            <div
+              className={css({
+                width: "80px",
+                height: "80px",
+                bg: "gray.100",
+                borderRadius: "2xl",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                mb: "4",
+              })}
+            >
+              <FolderOpen size={36} className={css({ color: "gray.400" })} />
+            </div>
+            <h2 className={css({ fontSize: "lg", fontWeight: "semibold", color: "gray.900", mb: "2" })}>
+              {searchQuery ? "No projects found" : "No projects yet"}
+            </h2>
+            <p className={css({ fontSize: "sm", color: "gray.500", mb: "6", maxWidth: "300px" })}>
+              {searchQuery
+                ? "Try adjusting your search query"
+                : "Create your first drainage design project to get started"}
+            </p>
+            {!searchQuery && (
+              <button
+                onClick={() => setShowNewProjectModal(true)}
+                className={css({
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "2",
+                  px: "5",
+                  py: "3",
+                  bg: "blue.500",
+                  color: "white",
+                  borderRadius: "lg",
+                  fontSize: "sm",
+                  fontWeight: "semibold",
+                  cursor: "pointer",
+                  _hover: { bg: "blue.600" },
+                })}
+              >
+                <Plus size={18} />
+                Create First Project
+              </button>
+            )}
+          </div>
+        ) : (
+          <div
+            className={css({
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+              gap: "4",
+              "@media (max-width: 640px)": {
+                gridTemplateColumns: "1fr",
+              },
+            })}
+          >
+            {filteredProjects.map((project) => {
+              const statusColors = getStatusColor(project.status)
+              return (
+                <div
+                  key={project.id}
+                  className={css({
+                    bg: "white",
+                    borderRadius: "xl",
+                    border: "1px solid",
+                    borderColor: "gray.200",
+                    overflow: "hidden",
+                    transition: "all 0.15s",
+                    _hover: { shadow: "md", borderColor: "gray.300" },
+                  })}
+                >
+                  <Link
+                    href={`/projects/${project.id}`}
+                    className={css({
+                      display: "block",
+                      p: "4",
+                      textDecoration: "none",
+                      cursor: "pointer",
+                    })}
+                  >
+                    <div
+                      className={css({
+                        display: "flex",
+                        alignItems: "flex-start",
+                        justifyContent: "space-between",
+                        mb: "3",
+                      })}
+                    >
+                      <div className={css({ minWidth: 0, flex: 1 })}>
+                        <h3
+                          className={css({
+                            fontSize: "base",
+                            fontWeight: "semibold",
+                            color: "gray.900",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          })}
+                        >
+                          {project.name}
+                        </h3>
+                        <div
+                          className={css({
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "1.5",
+                            mt: "1",
+                          })}
+                        >
+                          <MapPin size={14} className={css({ color: "gray.400", flexShrink: 0 })} />
+                          <span
+                            className={css({
+                              fontSize: "sm",
+                              color: "gray.500",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            })}
+                          >
+                            {project.address}
+                          </span>
+                        </div>
+                      </div>
+                      <ChevronRight size={20} className={css({ color: "gray.300", flexShrink: 0 })} />
+                    </div>
+
+                    <div
+                      className={css({
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        pt: "3",
+                        borderTop: "1px solid",
+                        borderColor: "gray.100",
+                      })}
+                    >
+                      <div className={css({ display: "flex", alignItems: "center", gap: "3" })}>
+                        <span
+                          className={css({
+                            px: "2",
+                            py: "0.5",
+                            fontSize: "xs",
+                            fontWeight: "medium",
+                            borderRadius: "md",
+                            textTransform: "capitalize",
+                            bg: statusColors.bg,
+                            color: statusColors.text,
+                          })}
+                        >
+                          {project.status}
+                        </span>
+                        <div
+                          className={css({
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "1",
+                          })}
+                        >
+                          <DollarSign size={14} className={css({ color: "gray.400" })} />
+                          <span className={css({ fontSize: "sm", fontWeight: "semibold", color: "gray.700" })}>
+                            {project.total_cost.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                      <div
+                        className={css({
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "1",
+                        })}
+                      >
+                        <Clock size={12} className={css({ color: "gray.400" })} />
+                        <span className={css({ fontSize: "xs", color: "gray.400" })}>
+                          {formatDate(project.updated_at)}
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+
+                  {/* Delete button row */}
+                  <div
+                    className={css({
+                      display: "flex",
+                      justifyContent: "flex-end",
+                      px: "4",
+                      pb: "3",
+                    })}
+                  >
+                    {deleteConfirm === project.id ? (
+                      <div className={css({ display: "flex", alignItems: "center", gap: "2" })}>
+                        <span className={css({ fontSize: "xs", color: "red.600" })}>Delete?</span>
+                        <button
+                          onClick={() => handleDelete(project.id)}
+                          className={css({
+                            px: "2",
+                            py: "1",
+                            fontSize: "xs",
+                            fontWeight: "medium",
+                            color: "white",
+                            bg: "red.500",
+                            borderRadius: "md",
+                            cursor: "pointer",
+                            _hover: { bg: "red.600" },
+                          })}
+                        >
+                          Yes
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirm(null)}
+                          className={css({
+                            px: "2",
+                            py: "1",
+                            fontSize: "xs",
+                            fontWeight: "medium",
+                            color: "gray.600",
+                            bg: "gray.100",
+                            borderRadius: "md",
+                            cursor: "pointer",
+                            _hover: { bg: "gray.200" },
+                          })}
+                        >
+                          No
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setDeleteConfirm(project.id)}
+                        className={css({
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "1",
+                          px: "2",
+                          py: "1",
+                          fontSize: "xs",
+                          color: "gray.400",
+                          borderRadius: "md",
+                          cursor: "pointer",
+                          _hover: { color: "red.500", bg: "red.50" },
+                        })}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </main>
+
+      {/* New Project Modal */}
+      {showNewProjectModal && (
+        <NewProjectModal onClose={() => setShowNewProjectModal(false)} />
+      )}
     </div>
+  )
+}
+
+function NewProjectModal({ onClose }: { onClose: () => void }) {
+  const router = useRouter()
+  const [address, setAddress] = useState("")
+  const [selectedLocation, setSelectedLocation] = useState<{
+    address: string
+    lat: number
+    lng: number
+  } | null>(null)
+  const [isCreating, setIsCreating] = useState(false)
+
+  const handleCreate = () => {
+    if (!selectedLocation) return
+
+    setIsCreating(true)
+    router.push(
+      `/projects/new?address=${encodeURIComponent(selectedLocation.address)}&lat=${selectedLocation.lat}&lng=${selectedLocation.lng}`
+    )
+  }
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className={css({
+          position: "fixed",
+          inset: 0,
+          bg: "black/50",
+          zIndex: 40,
+        })}
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div
+        className={css({
+          position: "fixed",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: "100%",
+          maxWidth: "500px",
+          bg: "white",
+          borderRadius: "2xl",
+          shadow: "2xl",
+          zIndex: 50,
+          overflow: "hidden",
+          "@media (max-width: 640px)": {
+            top: "auto",
+            bottom: 0,
+            left: 0,
+            transform: "none",
+            maxWidth: "100%",
+            borderBottomRadius: 0,
+          },
+        })}
+      >
+        {/* Header */}
+        <div
+          className={css({
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            px: "5",
+            py: "4",
+            borderBottom: "1px solid",
+            borderColor: "gray.200",
+          })}
+        >
+          <h2 className={css({ fontSize: "lg", fontWeight: "semibold", color: "gray.900" })}>
+            New Project
+          </h2>
+          <button
+            onClick={onClose}
+            className={css({
+              p: "2",
+              color: "gray.400",
+              borderRadius: "lg",
+              cursor: "pointer",
+              _hover: { bg: "gray.100", color: "gray.600" },
+            })}
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className={css({ p: "5" })}>
+          <label
+            className={css({
+              display: "block",
+              fontSize: "sm",
+              fontWeight: "medium",
+              color: "gray.700",
+              mb: "2",
+            })}
+          >
+            Property Address
+          </label>
+          <AddressSearch
+            value={address}
+            onChange={setAddress}
+            onSelect={setSelectedLocation}
+            placeholder="Start typing an address..."
+            autoFocus
+          />
+
+          {selectedLocation && (
+            <div
+              className={css({
+                mt: "4",
+                p: "3",
+                bg: "green.50",
+                borderRadius: "lg",
+                border: "1px solid",
+                borderColor: "green.200",
+              })}
+            >
+              <div className={css({ fontSize: "sm", fontWeight: "medium", color: "green.800" })}>
+                Location selected
+              </div>
+              <div className={css({ fontSize: "xs", color: "green.600", mt: "1" })}>
+                {selectedLocation.address}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div
+          className={css({
+            display: "flex",
+            gap: "3",
+            px: "5",
+            py: "4",
+            borderTop: "1px solid",
+            borderColor: "gray.100",
+            bg: "gray.50",
+          })}
+        >
+          <button
+            onClick={onClose}
+            className={css({
+              flex: 1,
+              py: "3",
+              fontSize: "sm",
+              fontWeight: "medium",
+              color: "gray.700",
+              bg: "white",
+              border: "1px solid",
+              borderColor: "gray.300",
+              borderRadius: "lg",
+              cursor: "pointer",
+              _hover: { bg: "gray.50" },
+            })}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleCreate}
+            disabled={!selectedLocation || isCreating}
+            className={css({
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "2",
+              py: "3",
+              fontSize: "sm",
+              fontWeight: "semibold",
+              color: "white",
+              bg: "blue.500",
+              borderRadius: "lg",
+              cursor: "pointer",
+              _hover: { bg: "blue.600" },
+              _disabled: { opacity: 0.5, cursor: "not-allowed" },
+            })}
+          >
+            {isCreating ? (
+              <Loader2 size={18} className={css({ animation: "spin 1s linear infinite" })} />
+            ) : (
+              <MapPin size={18} />
+            )}
+            {isCreating ? "Opening..." : "Open in Designer"}
+          </button>
+        </div>
+
+        {/* Safe area */}
+        <div className={css({ height: "env(safe-area-inset-bottom)" })} />
+      </div>
+    </>
   )
 }

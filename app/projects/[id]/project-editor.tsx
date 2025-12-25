@@ -64,7 +64,7 @@ export function ProjectEditor({ project }: ProjectEditorProps) {
       >
         <div className={css({ display: "flex", alignItems: "center", gap: "3", minWidth: 0 })}>
           <Link
-            href="/projects"
+            href="/"
             className={css({
               display: "flex",
               alignItems: "center",
@@ -91,7 +91,7 @@ export function ProjectEditor({ project }: ProjectEditorProps) {
                 },
               })}
             >
-              Projects
+              Home
             </span>
           </Link>
           <div
