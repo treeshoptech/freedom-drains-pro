@@ -1,6 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+// Routes that don't require authentication
+const publicRoutes = ["/login", "/auth/callback", "/api/geocode"];
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -29,8 +32,28 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Refresh session if expired
-  await supabase.auth.getUser();
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const path = request.nextUrl.pathname;
+  const isPublicRoute = publicRoutes.some((route) => path.startsWith(route));
+
+  // Redirect unauthenticated users to login
+  if (!user && !isPublicRoute) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("redirectTo", path);
+    return NextResponse.redirect(url);
+  }
+
+  // Redirect authenticated users away from login page
+  if (user && path === "/login") {
+    const redirectTo = request.nextUrl.searchParams.get("redirectTo") || "/";
+    const url = request.nextUrl.clone();
+    url.pathname = redirectTo;
+    url.searchParams.delete("redirectTo");
+    return NextResponse.redirect(url);
+  }
 
   return supabaseResponse;
 }
