@@ -5,6 +5,7 @@ import mapboxgl from "mapbox-gl"
 import "mapbox-gl/dist/mapbox-gl.css"
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css"
 import { useDraw } from "@/hooks/use-draw"
+import { useMapStore } from "@/stores/map-store"
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!
 
@@ -24,6 +25,7 @@ export function DesignMap({
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const [mapInstance, setMapInstance] = useState<mapboxgl.Map | null>(null)
+  const setGlobalMap = useMapStore((state) => state.setMap)
 
   // Initialize drawing tools
   useDraw(enableDrawing ? mapInstance : null)
@@ -36,6 +38,7 @@ export function DesignMap({
       style: "mapbox://styles/mapbox/satellite-v9",
       center,
       zoom,
+      preserveDrawingBuffer: true, // Required for screenshots
     })
 
     mapRef.current = newMap
@@ -44,6 +47,7 @@ export function DesignMap({
 
     newMap.on("load", () => {
       setMapInstance(newMap)
+      setGlobalMap(newMap)
       if (onMapReady) {
         onMapReady(newMap)
       }
@@ -53,8 +57,9 @@ export function DesignMap({
       mapRef.current?.remove()
       mapRef.current = null
       setMapInstance(null)
+      setGlobalMap(null)
     }
-  }, [center, zoom, onMapReady])
+  }, [center, zoom, onMapReady, setGlobalMap])
 
   return (
     <div
