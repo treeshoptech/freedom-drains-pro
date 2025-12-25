@@ -531,10 +531,78 @@ export function useDraw(map: Map | null) {
     [toggleFailedStatus]
   )
 
+  // Load design from saved project
+  const loadDesign = useCallback(
+    (designData: { type: "FeatureCollection"; features: DesignFeature[] }) => {
+      if (!drawRef.current || !map) return
+
+      // Clear existing features
+      drawRef.current.deleteAll()
+      useDesignStore.getState().clearFeatures()
+
+      // Add features to design store (not to draw for custom-rendered types)
+      const existingTypes = [
+        "existing-swale",
+        "existing-french-drain",
+        "existing-pipe",
+        "downspout",
+        "transition-box",
+        "stormwater-box",
+      ]
+
+      designData.features.forEach((feature) => {
+        // Add to design store
+        addFeature(feature)
+
+        // Add line features to Mapbox Draw (except existing types which are custom-rendered)
+        if (
+          feature.geometry.type === "LineString" &&
+          !existingTypes.includes(feature.properties.elementType)
+        ) {
+          drawRef.current?.add(feature)
+        }
+
+        // Add polygon features to Mapbox Draw
+        if (feature.geometry.type === "Polygon") {
+          drawRef.current?.add(feature)
+        }
+      })
+
+      // Fit map bounds to features
+      if (designData.features.length > 0) {
+        try {
+          const bbox = turf.bbox(designData)
+          if (bbox.every((v) => isFinite(v))) {
+            map.fitBounds(
+              [
+                [bbox[0], bbox[1]],
+                [bbox[2], bbox[3]],
+              ],
+              { padding: 50, maxZoom: 19 }
+            )
+          }
+        } catch {
+          // Ignore bbox errors for invalid geometries
+        }
+      }
+    },
+    [map, addFeature]
+  )
+
+  // Clear all features
+  const clearAll = useCallback(() => {
+    if (drawRef.current) {
+      drawRef.current.deleteAll()
+    }
+    useDesignStore.getState().clearFeatures()
+  }, [])
+
   return {
     draw: drawRef.current,
     deleteSelected,
     getAll,
     toggleFailed,
+    loadDesign,
+    clearAll,
   }
 }
